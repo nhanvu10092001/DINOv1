@@ -1,7 +1,9 @@
 import random
 from PIL import ImageFilter, ImageOps
 import torchvision.transforms as transforms
+from core.registry import TRANSFORMS
 
+@TRANSFORMS.register()
 class GaussianBlur(object):
     """
     Apply Gaussian Blur to the PIL image.
@@ -20,6 +22,7 @@ class GaussianBlur(object):
             )
         return img
 
+@TRANSFORMS.register()
 class Solarization(object):
     """
     Apply Solarization to the PIL image.
@@ -32,6 +35,7 @@ class Solarization(object):
             return ImageOps.solarize(img)
         return img
 
+@TRANSFORMS.register()
 class DataAugmentationDINO(object):
     def __init__(
         self,

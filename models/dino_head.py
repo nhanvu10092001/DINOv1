@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
+from core.registry import HEADS, MODULES
 
+@HEADS.register()
+@MODULES.register()
 class DINOHead(nn.Module):
     def __init__(self, in_dim, out_dim, use_bn=False, norm_last_layer=True, nlayers=3, hidden_dim=2048, bottleneck_dim=256):
         super().__init__()

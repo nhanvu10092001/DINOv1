@@ -2,7 +2,9 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from core.registry import MODULES, BACKBONES
 
+@MODULES.register()
 class PatchEmbed(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768):
         super().__init__()
@@ -18,6 +20,7 @@ class PatchEmbed(nn.Module):
         x = x.flatten(2).transpose(1, 2)  # (B, num_patches, embed_dim)
         return x
 
+@MODULES.register()
 class Attention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False):
         super().__init__()
@@ -40,6 +43,7 @@ class Attention(nn.Module):
         x = self.proj(x)
         return x, attn
 
+@MODULES.register()
 class MLP(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None):
         super().__init__()
@@ -55,6 +59,7 @@ class MLP(nn.Module):
         x = self.fc2(x)
         return x
 
+@MODULES.register()
 class Block(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False):
         super().__init__()
@@ -72,6 +77,7 @@ class Block(nn.Module):
             return x, attn
         return x
 
+@BACKBONES.register()
 class VisionTransformer(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=0, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False):
@@ -161,10 +167,12 @@ class VisionTransformer(nn.Module):
                 _, attn = blk(x, return_attention=True)
                 return attn
 
+@BACKBONES.register("vit_tiny")
 def vit_tiny(patch_size=16, **kwargs):
     model = VisionTransformer(patch_size=patch_size, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4, qkv_bias=True, **kwargs)
     return model
 
+@BACKBONES.register("vit_small")
 def vit_small(patch_size=16, **kwargs):
     model = VisionTransformer(patch_size=patch_size, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True, **kwargs)
     return model
