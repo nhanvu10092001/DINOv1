@@ -1,0 +1,10 @@
+torch
+torchvision
+timm
+pyyaml
+tqdm
+matplotlib
+datasets
+huggingface_hub
+einops
+pytest
