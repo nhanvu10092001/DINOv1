@@ -1,0 +1,60 @@
+dataset:
+  data_path: "data/train"
+  global_crops_scale: [0.4, 1.0]
+  local_crops_scale: [0.05, 0.4]
+  local_crops_number: 6
+
+model:
+  backbone:
+    type: vit_small_sparse_rope
+    patch_size: 16
+    pos_embed_type: rope
+    rope_cfg:
+      mode: adaptive_2d
+      base: 10000.0
+      ref_img_size: 224
+      patch_size: 16
+    sparse_attn_cfg:
+      sparse_mode: sparse
+      k_local_window: 3
+      k_semantic: 16
+      cls_full_attn: true
+      attn_backend: mask
+  head:
+    type: DINOHead
+    in_dim: 384
+    out_dim: 16384
+    use_bn: false
+    norm_last_layer: true
+    nlayers: 3
+    hidden_dim: 2048
+    bottleneck_dim: 256
+
+loss:
+  type: DINOLoss
+  out_dim: 16384
+  ncrops: 8
+  student_temp: 0.1
+  center_momentum: 0.9
+  warmup_teacher_temp: 0.04
+  teacher_temp: 0.04
+  warmup_teacher_temp_epochs: 30
+  nepochs: 100
+
+train:
+  epochs: 100
+  batch_size_per_gpu: 32 # Optimized for 8GB VRAM RTX 3070
+  gradient_accumulation_steps: 4 # Effective batch size = 128
+  clip_grad: 3.0
+  save_ckp_freq: 10
+  output_dir: "checkpoints"
+  optimizer:
+    type: AdamW
+    lr: 0.0005
+    weight_decay: 0.04
+  lr: 0.0005
+  min_lr: 0.00001
+  warmup_epochs: 10
+  weight_decay: 0.04
+  weight_decay_end: 0.4
+  momentum_teacher: 0.996

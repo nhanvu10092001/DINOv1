@@ -13,6 +13,7 @@ from core.builder import build_loss, build_model, build_optimizer
         "configs/vit_tiny_yolo.yaml",
         "configs/vit_small_modular.yaml",
         "configs/vit_small_200k.yaml",
+        "configs/vit_small_sparse_rope.yaml",
     ],
 )
 def test_load_and_build_configs(config_path):
