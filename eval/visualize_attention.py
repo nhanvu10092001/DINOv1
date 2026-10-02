@@ -16,7 +16,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser(description='Visualize self-attention maps')
     parser.add_argument('--image_path', default=None, type=str, help='Path to the image')
     parser.add_argument('--patch_size', default=16, type=int, help='Patch size')
-    parser.add_argument('--arch', default='vit_small', type=str, choices=['vit_tiny', 'vit_small'])
+    parser.add_argument('--arch', default='vit_small', type=str, choices=['vit_tiny', 'vit_small', 'vit_tiny_sparse_rope', 'vit_small_sparse_rope'])
     parser.add_argument('--pretrained_weights', default='', type=str, help='Path to pretrained weights')
     parser.add_argument('--output_dir', default='output', type=str, help='Path to save output images')
     return parser
@@ -29,15 +29,23 @@ def main():
         model = vits.vit_small(patch_size=args.patch_size)
     elif args.arch == 'vit_tiny':
         model = vits.vit_tiny(patch_size=args.patch_size)
+    elif args.arch == 'vit_small_sparse_rope':
+        model = vits.vit_small_sparse_rope(patch_size=args.patch_size)
+    elif args.arch == 'vit_tiny_sparse_rope':
+        model = vits.vit_tiny_sparse_rope(patch_size=args.patch_size)
+    else:
+        raise ValueError(f"Unsupported arch: {args.arch}")
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
 
     # Load weights
     if os.path.isfile(args.pretrained_weights):
-        state_dict = torch.load(args.pretrained_weights, map_location='cpu')
+        state_dict = torch.load(args.pretrained_weights, map_location='cpu', weights_only=False)
         if 'teacher' in state_dict:
             state_dict = state_dict['teacher']
+        elif 'student' in state_dict:
+            state_dict = state_dict['student']
         # Remove wrapper prefixes if necessary
         state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items() if "backbone." in k or not k.startswith("head")}
         model.load_state_dict(state_dict, strict=False)
@@ -99,7 +107,7 @@ def main():
         axes[i+1].axis('off')
 
     plt.tight_layout()
-    output_path = os.path.join(args.output_dir, 'attn_map.png')
+    output_path = os.path.join(args.output_dir, f'attn_map_{args.arch}.png')
     plt.savefig(output_path)
     print(f"Attention map saved to {output_path}")
 

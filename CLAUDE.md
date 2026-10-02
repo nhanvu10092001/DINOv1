@@ -270,39 +270,62 @@ python train.py --config configs/vit_small_sparse_rope.yaml
 
 ### 4.5. Đánh giá mô hình (Evaluation)
 
+Hệ thống hỗ trợ cả định dạng `image_folder` (ImageNet / ImageNet-100) và các tập downstream chuẩn của DINO (`cifar10`, `cifar100`), đồng thời hỗ trợ cả kiến trúc chuẩn (`vit_small`, `vit_tiny`) lẫn biến thể tích hợp RoPE (`vit_small_sparse_rope`, `vit_tiny_sparse_rope`).
+
 #### 1. Đánh giá k-Nearest Neighbors (k-NN Classifier)
 Trích xuất đặc trưng của tập train và val từ Teacher backbone đã đóng băng, tính độ tương đồng cosine và dự đoán nhãn:
 ```bash
+# Đánh giá ViT-Small chuẩn
 python eval/eval_knn.py \
-    --data_path data \
-    --pretrained_weights checkpoints/checkpoint0010.pth \
+    --data_path data/cifar10 \
+    --dataset cifar10 \
+    --pretrained_weights weight_df/checkpoints_default_1/checkpoint0040.pth \
     --arch vit_small \
-    --patch_size 16 \
-    --k 20 \
-    --temperature 0.07
+    --k 20
+
+# Đánh giá ViT-Small tích hợp RoPE & Sparse Attention
+python eval/eval_knn.py \
+    --data_path data/cifar10 \
+    --dataset cifar10 \
+    --pretrained_weights weight_rope/checkpoints_rope_1/checkpoint0040.pth \
+    --arch vit_small_sparse_rope \
+    --k 20
 ```
 
 #### 2. Đánh giá Linear Probing
-Huấn luyện một lớp Linear Classifier trên đầu các biểu diễn đặc trưng đóng băng của backbone:
+Huấn luyện một lớp Linear Classifier trên đầu các biểu diễn đặc trưng đóng băng của backbone (hỗ trợ `--cache_features` giúp tăng tốc độ tối đa):
 ```bash
+# Huấn luyện Linear Classifier trên ViT-Small chuẩn
 python eval/eval_linear.py \
-    --data_path data \
-    --pretrained_weights checkpoints/checkpoint0010.pth \
+    --data_path data/cifar10 \
+    --dataset cifar10 \
+    --pretrained_weights weight_df/checkpoints_default_1/checkpoint0040.pth \
     --arch vit_small \
-    --patch_size 16 \
-    --epochs 30
+    --epochs 30 \
+    --lr 0.1 \
+    --cache_features
+
+# Huấn luyện Linear Classifier trên ViT-Small RoPE
+python eval/eval_linear.py \
+    --data_path data/cifar10 \
+    --dataset cifar10 \
+    --pretrained_weights weight_rope/checkpoints_rope_1/checkpoint0040.pth \
+    --arch vit_small_sparse_rope \
+    --epochs 30 \
+    --lr 0.1 \
+    --cache_features
 ```
 
 #### 3. Trực quan hóa Attention Map (Self-Attention Maps Visualization)
 Trích xuất và vẽ bản đồ chú ý của `[CLS]` token trên các attention head khác nhau:
 ```bash
 python eval/visualize_attention.py \
-    --image_path data/val/sample.jpg \
-    --pretrained_weights checkpoints/checkpoint0010.pth \
-    --arch vit_small \
+    --image_path output/sample_airplane.jpg \
+    --pretrained_weights weight_rope/checkpoints_rope_1/checkpoint0040.pth \
+    --arch vit_small_sparse_rope \
     --output_dir output
 ```
-Kết quả ảnh trực quan hóa sẽ được lưu tại `output/attn_map.png`.
+Kết quả ảnh trực quan hóa sẽ được lưu phân biệt theo kiến trúc: `output/attn_map_{arch}.png`.
 
 ---
 
