@@ -16,7 +16,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser(description='Visualize self-attention maps')
     parser.add_argument('--image_path', default=None, type=str, help='Path to the image')
     parser.add_argument('--patch_size', default=16, type=int, help='Patch size')
-    parser.add_argument('--arch', default='vit_small', type=str, choices=['vit_tiny', 'vit_small', 'vit_tiny_sparse_rope', 'vit_small_sparse_rope'])
+    parser.add_argument('--arch', default='vit_small', type=str, choices=['vit_tiny', 'vit_small', 'vit_tiny_sparse_rope', 'vit_small_sparse_rope', 'vit_tiny_multiscale', 'vit_small_multiscale'])
     parser.add_argument('--pretrained_weights', default='', type=str, help='Path to pretrained weights')
     parser.add_argument('--output_dir', default='output', type=str, help='Path to save output images')
     return parser
@@ -25,14 +25,8 @@ def main():
     args = get_args_parser().parse_args()
 
     # Build model
-    if args.arch == 'vit_small':
-        model = vits.vit_small(patch_size=args.patch_size)
-    elif args.arch == 'vit_tiny':
-        model = vits.vit_tiny(patch_size=args.patch_size)
-    elif args.arch == 'vit_small_sparse_rope':
-        model = vits.vit_small_sparse_rope(patch_size=args.patch_size)
-    elif args.arch == 'vit_tiny_sparse_rope':
-        model = vits.vit_tiny_sparse_rope(patch_size=args.patch_size)
+    if hasattr(vits, args.arch):
+        model = getattr(vits, args.arch)(patch_size=args.patch_size)
     else:
         raise ValueError(f"Unsupported arch: {args.arch}")
 

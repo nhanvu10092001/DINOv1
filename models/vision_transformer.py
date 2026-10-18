@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from core.registry import MODULES, BACKBONES
 from models.rope import FrequencyAdaptive2DRoPE
-from models.sparse_attention import SpatialSemanticAttention
+from models.sparse_attention import SpatialSemanticAttention, MultiScale2DWindowAttention
 
 @MODULES.register()
 class PatchEmbed(nn.Module):
@@ -76,13 +76,25 @@ class Block(nn.Module):
         super().__init__()
         self.norm1 = nn.LayerNorm(dim, eps=1e-6)
         if sparse_attn_cfg is not None:
-            self.attn = SpatialSemanticAttention(
-                dim=dim,
-                num_heads=num_heads,
-                qkv_bias=qkv_bias,
-                rope=rope,
-                **sparse_attn_cfg,
-            )
+            cfg_copy = dict(sparse_attn_cfg)
+            attn_type = cfg_copy.pop("type", None)
+            if attn_type == "MultiScale2DWindowAttention" or cfg_copy.get("sparse_mode") == "multiscale_2d":
+                cfg_copy.pop("sparse_mode", None)
+                self.attn = MultiScale2DWindowAttention(
+                    dim=dim,
+                    num_heads=num_heads,
+                    qkv_bias=qkv_bias,
+                    rope=rope,
+                    **cfg_copy,
+                )
+            else:
+                self.attn = SpatialSemanticAttention(
+                    dim=dim,
+                    num_heads=num_heads,
+                    qkv_bias=qkv_bias,
+                    rope=rope,
+                    **cfg_copy,
+                )
         elif rope is not None:
             self.attn = SpatialSemanticAttention(
                 dim=dim,
@@ -104,7 +116,9 @@ class Block(nn.Module):
         grid_size: Optional[Tuple[int, int]] = None,
         return_attention: bool = False,
     ):
-        if isinstance(self.attn, SpatialSemanticAttention):
+        if isinstance(self.attn, MultiScale2DWindowAttention):
+            y, attn = self.attn(self.norm1(x), grid_size=grid_size, return_attention=return_attention)
+        elif isinstance(self.attn, SpatialSemanticAttention):
             y, attn = self.attn(self.norm1(x), grid_size=grid_size, return_attention=True)
         else:
             y, attn = self.attn(self.norm1(x))
@@ -288,3 +302,56 @@ def vit_small_sparse_rope(patch_size=16, pos_embed_type="rope", **kwargs):
         **kwargs,
     )
     return model
+
+@BACKBONES.register("vit_tiny_multiscale")
+def vit_tiny_multiscale(patch_size=16, pos_embed_type="learned_abs", **kwargs):
+    head_window_sizes = kwargs.pop("head_window_sizes", [3, 5, -1])
+    cls_bidirectional = kwargs.pop("cls_bidirectional", True)
+    sparse_attn_cfg = kwargs.pop(
+        "sparse_attn_cfg",
+        {
+            "type": "MultiScale2DWindowAttention",
+            "head_window_sizes": head_window_sizes,
+            "cls_bidirectional": cls_bidirectional,
+        },
+    )
+    model = VisionTransformer(
+        patch_size=patch_size,
+        embed_dim=192,
+        depth=12,
+        num_heads=3,
+        mlp_ratio=4,
+        qkv_bias=True,
+        pos_embed_type=pos_embed_type,
+        rope_cfg=None,
+        sparse_attn_cfg=sparse_attn_cfg,
+        **kwargs,
+    )
+    return model
+
+@BACKBONES.register("vit_small_multiscale")
+def vit_small_multiscale(patch_size=16, pos_embed_type="learned_abs", **kwargs):
+    head_window_sizes = kwargs.pop("head_window_sizes", [3, 5, 7, -1, -1, -1])
+    cls_bidirectional = kwargs.pop("cls_bidirectional", True)
+    sparse_attn_cfg = kwargs.pop(
+        "sparse_attn_cfg",
+        {
+            "type": "MultiScale2DWindowAttention",
+            "head_window_sizes": head_window_sizes,
+            "cls_bidirectional": cls_bidirectional,
+        },
+    )
+    model = VisionTransformer(
+        patch_size=patch_size,
+        embed_dim=384,
+        depth=12,
+        num_heads=6,
+        mlp_ratio=4,
+        qkv_bias=True,
+        pos_embed_type=pos_embed_type,
+        rope_cfg=None,
+        sparse_attn_cfg=sparse_attn_cfg,
+        **kwargs,
+    )
+    return model
+
