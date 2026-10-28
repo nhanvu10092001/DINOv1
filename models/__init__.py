@@ -11,6 +11,7 @@ from models.vision_transformer import (
 )
 from models.rope import FrequencyAdaptive2DRoPE
 from models.sparse_attention import SpatialSemanticAttention, MultiScale2DWindowAttention
+from models.grpo_policy_wrapper import DINOGRPOPolicyWrapper, infer_arch_from_state_dict
 import models.yolo_layers
 from models.yolo_parser import parse_model_layers, YOLOModel
 
@@ -27,6 +28,8 @@ __all__ = [
     "FrequencyAdaptive2DRoPE",
     "SpatialSemanticAttention",
     "MultiScale2DWindowAttention",
+    "DINOGRPOPolicyWrapper",
+    "infer_arch_from_state_dict",
     "parse_model_layers",
     "YOLOModel",
 ]
