@@ -1,0 +1,5 @@
+Model Variant,Architecture,Stage-2 RLVR,k-NN Top-1 (%),k-NN Top-5 (%),Linear Probe Top-1 (%),Foreground IoU (%),CorLoc @ IoU>=0.5 (%)
+Vanilla DINOv1,vit_small,No,43.00,90.00,49.00,48.63,49.00
+RoPE+Sparse DINOv1,vit_small_sparse_rope,No,44.00,87.00,52.00,44.34,33.00
+Vanilla+Dr.GRPO,vit_small,Dr. GRPO,53.00,90.00,55.00,52.58,56.00
+RoPE+Sparse+Dr.GRPO (Ours),vit_small_sparse_rope,Dr. GRPO,60.00,93.00,60.00,46.58,40.00
