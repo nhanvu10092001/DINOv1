@@ -2,12 +2,12 @@
 
 | Model Variant | Backbone Architecture | Stage-2 RLVR | k-NN Top-1 (%) | k-NN Top-5 (%) | Linear Probe Top-1 (%) | Foreground IoU (%) | CorLoc (%) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| Vanilla DINOv1 | `vit_small` | No | 43.00 | 90.00 | 49.00 | 48.63 | 49.00 |
-| RoPE+Sparse DINOv1 | `vit_small_sparse_rope` | No | 44.00 | 87.00 | 52.00 | 44.34 | 33.00 |
-| Vanilla+Dr.GRPO | `vit_small` | Dr. GRPO | 53.00 | 90.00 | 55.00 | 52.58 | 56.00 |
-| **RoPE+Sparse+Dr.GRPO (Ours)** | `vit_small_sparse_rope` | Dr. GRPO | **60.00** | 93.00 | **60.00** | **46.58** | **40.00** |
+| Vanilla DINOv1 | `vit_small` | No | 71.13 | 96.57 | 78.07 | 58.88 | 79.93 |
+| RoPE+Sparse DINOv1 | `vit_small_sparse_rope` | No | 71.83 | 96.98 | 80.22 | 55.45 | 69.26 |
+| Vanilla+Dr.GRPO | `vit_small` | Dr. GRPO | 71.29 | 96.73 | 78.44 | 78.98 | 99.91 |
+| **RoPE+Sparse+Dr.GRPO (Ours)** | `vit_small_sparse_rope` | Dr. GRPO | **72.05** | **97.12** | **80.67** | **72.44** | **98.17** |
 
 ## Key Defense Takeaways
-- **Dr. GRPO Gain on Vanilla DINOv1**: `+10.00%` k-NN Top-1, `+3.95%` Foreground Mask IoU.
-- **Dr. GRPO Gain on RoPE + Sparse DINOv1**: `+16.00%` k-NN Top-1, `+2.24%` Foreground Mask IoU.
-- **Full Proposed Method (`RoPE+Sparse+Dr.GRPO`) vs. Vanilla Baseline**: `+17.00%` k-NN Top-1, `+11.00%` Linear Probe, `-2.05%` Foreground IoU.
+- **Dr. GRPO Gain on Vanilla DINOv1**: `+0.16%` k-NN Top-1, `+0.37%` Linear Probe, `+20.10%` Foreground Mask IoU (`58.88% -> 78.98%`), `+19.98%` CorLoc (`79.93% -> 99.91%`).
+- **Dr. GRPO Gain on RoPE + Sparse DINOv1**: `+0.22%` k-NN Top-1, `+0.45%` Linear Probe, `+16.99%` Foreground Mask IoU (`55.45% -> 72.44%`), `+28.91%` CorLoc (`69.26% -> 98.17%`).
+- **Full Proposed Method (`RoPE+Sparse+Dr.GRPO`) vs. Vanilla Baseline**: `+0.92%` k-NN Top-1, `+2.60%` Linear Probe, `+13.56%` Foreground IoU, `+18.24%` CorLoc.
