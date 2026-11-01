@@ -1,6 +1,6 @@
 # Báo Cáo Đánh Giá Hiệu Năng Mô Hình DINOv1: Default ViT-Small vs. RoPE + Sparse Attention
 
-Báo cáo kỹ thuật tổng hợp toàn diện kết quả đánh giá (Evaluation Report) cho hai mô hình tự học không giám sát DINOv1 (Vision Transformer - Caron et al., 2021) sau 40 epoch huấn luyện:
+Báo cáo kỹ thuật tổng hợp toàn diện kết quả đánh giá (Evaluation Report) cho hai mô hình tự học không giám sát DINOv1 (Vision Transformer - Caron et al., 2021) sau **190 epochs** huấn luyện (pretraining) trên tập **ImageNet-100** bằng GPU **NVIDIA H100**, và đánh giá trực tiếp trên tập **CIFAR-10**:
 1. **Mô hình 1 (Default)**: ViT-Small/16 chuẩn với mã hóa vị trí tuyệt đối (Absolute Positional Embedding) và Dense Multi-Head Attention.
 2. **Mô hình 2 (RoPE)**: ViT-Small/16 tích hợp **Frequency-Adaptive 2D Rotary Position Embedding (RoPE)** kết hợp **Spatial-Semantic Sparse Attention**.
 
@@ -10,7 +10,11 @@ Báo cáo kỹ thuật tổng hợp toàn diện kết quả đánh giá (Evalua
 
 | Thông số / Thuộc tính | Mô hình Default | Mô hình RoPE + Sparse |
 |---|---|---|
-| **Đường dẫn Checkpoint** | `weight_df/checkpoints_default_1/checkpoint0040.pth` | `weight_rope/checkpoints_rope_1/checkpoint0040.pth` |
+| **Đường dẫn Checkpoint** | `cp/checkpoints_default_2/checkpoint0190.pth` | `cp/checkpoints_rope_2/checkpoint0190.pth` |
+| **Tập dữ liệu Pretraining** | ImageNet-100 (`clane9/imagenet-100`) | ImageNet-100 (`clane9/imagenet-100`) |
+| **Phần cứng Pretraining** | NVIDIA H100 GPU | NVIDIA H100 GPU |
+| **Số Epoch Pretraining** | 190 epochs | 190 epochs |
+| **Tập dữ liệu Evaluation** | CIFAR-10 | CIFAR-10 |
 | **Định danh Backbone (Registry)** | `vit_small` | `vit_small_sparse_rope` |
 | **Kích thước Patch (Patch Size)** | $16 \times 16$ | $16 \times 16$ |
 | **Số khối Transformer (Depth)** | 12 blocks | 12 blocks |
@@ -20,7 +24,6 @@ Báo cáo kỹ thuật tổng hợp toàn diện kết quả đánh giá (Evalua
 | **Cơ chế vị trí (Positional Embedding)** | Learnable 1D/2D Absolute Pos Embed | Frequency-Adaptive 2D RoPE (`adaptive_2d`) |
 | **Cơ chế Attention** | Full Dense Softmax Attention | Spatial-Semantic Sparse ($K_{\text{local}}=3, K_{\text{semantic}}=16$) |
 | **Projection Head (DINOHead)** | MLP 3 lớp, Hidden 2048, Bottleneck 256, Out 16384 | MLP 3 lớp, Hidden 2048, Bottleneck 256, Out 16384 |
-| **Epoch checkpoint** | Epoch 40 | Epoch 40 |
 
 ---
 
@@ -51,20 +54,25 @@ Theo quy chuẩn bài báo DINO gốc (Caron et al., 2021, Section 3.2 và Table
 1. **k-Nearest Neighbors (k-NN) Classifier**: Đóng băng hoàn toàn mô hình, trích xuất đặc trưng của tập train (50,000 ảnh) và đánh giá trên tập val (10,000 ảnh) với $k=20$, nhiệt độ $T=0.07$. Không cần huấn luyện thêm hay tinh chỉnh siêu tham số.
 2. **Linear Probing**: Đóng băng backbone, huấn luyện một lớp Linear Classifier ($384 \rightarrow 10$) trong 30 epochs với thuật toán tối ưu SGD (Momentum 0.9, Learning Rate ban đầu 0.1, Cosine Annealing scheduler).
 
-### Bảng đối sánh kết quả định lượng:
+### Bảng đối sánh kết quả định lượng (Checkpoint Epoch 190):
 
 | Phương pháp đánh giá | Mô hình Default | Mô hình RoPE + Sparse | Mức độ cải thiện (Gain) |
 |---|:---:|:---:|:---:|
-| **k-NN Classifier Top-1 ($k=20$)** | **71.67%** | **73.04%** | <span style="color:#00aa00">**+1.37%**</span> |
-| **k-NN Classifier Top-5 ($k=20$)** | **96.82%** | **96.87%** | <span style="color:#00aa00">**+0.05%**</span> |
-| **Linear Probing Top-1 (Epoch 10)** | 62.77% | 74.48% | <span style="color:#00aa00">**+11.71%**</span> |
-| **Linear Probing Top-1 (Epoch 20)** | 75.72% | 77.19% | <span style="color:#00aa00">**+1.47%**</span> |
-| **Linear Probing Top-1 (Best - Epoch 30)** | **76.77%** | **78.57%** | <span style="color:#00aa00">**+1.80%**</span> |
-| **Linear Probing Train Loss cuối** | 0.9151 | 0.8766 | <span style="color:#00aa00">**-0.0385 (Hội tụ tốt hơn)**</span> |
+| **k-NN Classifier Top-1 ($k=10$)** | **74.41%** | **75.97%** | <span style="color:#00aa00">**+1.56%**</span> |
+| **k-NN Classifier Top-5 ($k=10$)** | **96.23%** | **96.55%** | <span style="color:#00aa00">**+0.32%**</span> |
+| **k-NN Classifier Top-1 ($k=20$)** | **74.34%** | **75.31%** | <span style="color:#00aa00">**+0.97%**</span> |
+| **k-NN Classifier Top-5 ($k=20$)** | **97.42%** | **97.79%** | <span style="color:#00aa00">**+0.37%**</span> |
+| **k-NN Classifier Top-1 ($k=200$)** | **70.41%** | **70.65%** | <span style="color:#00aa00">**+0.24%**</span> |
+| **Linear Probing Top-1 (Epoch 10, 30-ep)** | 73.76% | **79.86%** | <span style="color:#00aa00">**+6.10%**</span> |
+| **Linear Probing Top-1 (Epoch 20, 30-ep)** | 78.61% | **81.12%** | <span style="color:#00aa00">**+2.51%**</span> |
+| **Linear Probing Top-1 (Best - Epoch 30)** | **80.46%** | **82.60%** | <span style="color:#00aa00">**+2.14%**</span> |
+| **Linear Probing Train Loss cuối (Epoch 30)** | 0.5127 | **0.4521** | <span style="color:#00aa00">**-0.0606 (Hội tụ tốt hơn)**</span> |
+| **Linear Probing Top-1 (100-ep Standardized)** | **81.30%** | **83.87%** | <span style="color:#00aa00">**+2.57%**</span> |
+| **Linear Probing Top-5 (100-ep Standardized)** | **99.31%** | **99.43%** | <span style="color:#00aa00">**+0.12%**</span> |
 
 ### Phân tích biểu diễn đặc trưng:
-- **Tính phân cụm ngữ nghĩa vượt trội**: Mô hình RoPE đạt mức cải thiện **+1.37% ở k-NN** và **+1.80% ở Linear Probe**, cho thấy không gian nhúng của RoPE giúp các biểu diễn cùng lớp gần nhau hơn và các lớp khác nhau phân tách rõ rệt hơn.
-- **Tốc độ hội tụ phân loại nhanh hơn đáng kể**: Ở epoch 10 của Linear Probing, mô hình RoPE đã đạt **74.48%** (vượt xa mức 62.77% của Default). Điều này chứng minh đặc trưng trích xuất từ mô hình RoPE có tính chất tuyến tính khả tách (linearly separable) cao hơn ngay từ đầu.
+- **Tính phân cụm ngữ nghĩa vượt trội**: Mô hình RoPE đạt mức cải thiện **+1.56% ở k-NN ($k=10$)**, **+0.97% ở k-NN ($k=20$)**, **+2.14% ở Linear Probe (30 epochs)** và **+2.57% ở Linear Probe chuẩn hóa (100 epochs, đạt 83.87%)**, cho thấy không gian nhúng của RoPE giúp các biểu diễn cùng lớp gần nhau hơn và các lớp khác nhau phân tách rõ rệt hơn.
+- **Tốc độ hội tụ phân loại nhanh hơn đáng kể**: Ở epoch 10 của Linear Probing (`lr=0.1`), mô hình RoPE đã đạt **79.86%** (vượt xa mức 73.76% của Default, **+6.10%**). Điều này chứng minh đặc trưng trích xuất từ mô hình RoPE có tính chất tuyến tính khả tách (linearly separable) cao hơn ngay từ đầu.
 
 ---
 
@@ -96,7 +104,7 @@ Tất cả các công cụ đánh giá đã được chuẩn hóa và sẵn sàn
 python eval/eval_knn.py \
     --data_path data/cifar10 \
     --dataset cifar10 \
-    --pretrained_weights weight_df/checkpoints_default_1/checkpoint0040.pth \
+    --pretrained_weights cp/checkpoints_default_2/checkpoint0190.pth \
     --arch vit_small \
     --k 20
 
@@ -104,7 +112,7 @@ python eval/eval_knn.py \
 python eval/eval_knn.py \
     --data_path data/cifar10 \
     --dataset cifar10 \
-    --pretrained_weights weight_rope/checkpoints_rope_1/checkpoint0040.pth \
+    --pretrained_weights cp/checkpoints_rope_2/checkpoint0190.pth \
     --arch vit_small_sparse_rope \
     --k 20
 ```
@@ -115,7 +123,7 @@ python eval/eval_knn.py \
 python eval/eval_linear.py \
     --data_path data/cifar10 \
     --dataset cifar10 \
-    --pretrained_weights weight_df/checkpoints_default_1/checkpoint0040.pth \
+    --pretrained_weights cp/checkpoints_default_2/checkpoint0190.pth \
     --arch vit_small \
     --epochs 30 \
     --lr 0.1 \
@@ -125,7 +133,7 @@ python eval/eval_linear.py \
 python eval/eval_linear.py \
     --data_path data/cifar10 \
     --dataset cifar10 \
-    --pretrained_weights weight_rope/checkpoints_rope_1/checkpoint0040.pth \
+    --pretrained_weights cp/checkpoints_rope_2/checkpoint0190.pth \
     --arch vit_small_sparse_rope \
     --epochs 30 \
     --lr 0.1 \
@@ -135,8 +143,8 @@ python eval/eval_linear.py \
 ### 3. Trực quan hóa Attention Map
 ```bash
 python eval/visualize_attention.py \
-    --image_path output/sample_airplane.jpg \
-    --pretrained_weights weight_rope/checkpoints_rope_1/checkpoint0040.pth \
+    --image_path output/sample.jpg \
+    --pretrained_weights cp/checkpoints_rope_2/checkpoint0190.pth \
     --arch vit_small_sparse_rope \
     --output_dir output
 ```
@@ -145,7 +153,7 @@ python eval/visualize_attention.py \
 
 ## 6. Kết Luận
 
-1. **Hiệu quả kiến trúc**: Việc tích hợp **Frequency-Adaptive 2D RoPE** kết hợp **Spatial-Semantic Sparse Attention** cải thiện chất lượng tự học biểu diễn không giám sát của DINOv1 trên mọi thước đo:
-   - Tăng **+1.37% k-NN Top-1 Accuracy** ($71.67\% \rightarrow 73.04\%$).
-   - Tăng **+1.80% Linear Probe Top-1 Accuracy** ($76.77\% \rightarrow 78.57\%$).
+1. **Hiệu quả kiến trúc**: Việc tích hợp **Frequency-Adaptive 2D RoPE** kết hợp **Spatial-Semantic Sparse Attention** cải thiện chất lượng tự học biểu diễn không giám sát của DINOv1 (sau 190 epochs pretrain trên ImageNet-100 bằng NVIDIA H100) trên mọi thước đo đánh giá CIFAR-10:
+   - Tăng **+1.56% k-NN ($k=10$) Top-1 Accuracy** ($74.41\% \rightarrow 75.97\%$) và **+0.97% k-NN ($k=20$) Top-1 Accuracy** ($74.34\% \rightarrow 75.31\%$).
+   - Tăng **+2.14% Linear Probe (30 epochs) Top-1 Accuracy** ($80.46\% \rightarrow 82.60\%$) và **+2.57% Linear Probe (100 epochs standardized) Top-1 Accuracy** ($81.30\% \rightarrow 83.87\%$).
 2. **Chi phí tài nguyên**: Mô hình giữ nguyên 100% dung lượng tham số (21.67M params) và độ phức tạp lý thuyết (9.20 GFLOPs), chứng minh hiệu quả thuần túy đến từ việc mô hình hóa không gian 2D tốt hơn thay vì tăng dung lượng mô hình.

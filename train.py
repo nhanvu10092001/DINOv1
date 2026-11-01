@@ -186,7 +186,7 @@ def main(cfg):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DINO self-supervised training")
-    parser.add_argument("--config", default="configs/vit_tiny_yolo.yaml", type=str)
+    parser.add_argument("--config", default="configs/vit_small_sparse_rope.yaml", type=str)
     args = parser.parse_args()
 
     with open(args.config, "r") as f:

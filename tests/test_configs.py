@@ -10,7 +10,6 @@ from core.builder import build_loss, build_model, build_optimizer
 @pytest.mark.parametrize(
     "config_path",
     [
-        "configs/vit_tiny_yolo.yaml",
         "configs/vit_small_modular.yaml",
         "configs/vit_small_200k.yaml",
         "configs/vit_small_sparse_rope.yaml",

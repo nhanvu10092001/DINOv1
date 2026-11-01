@@ -38,32 +38,6 @@ def test_build_model_standard_config():
     assert out.shape == (2, 1024)
 
 
-def test_build_model_yolo_config():
-    cfg = {
-        "model": {
-            "backbone": {
-                "type": "YOLOModel",
-                "layers": [
-                    [-1, 1, "PatchEmbed", [224, 16, 3, 64]],
-                    [-1, 1, "PosEmbedAndClassToken", [64, 196]],
-                    [-1, 2, "Block", [64, 2, 2.0, True]],
-                    [-1, 1, "LayerNorm1d", [64]],
-                    [-1, 1, "ExtractToken", [0]],
-                ],
-            },
-            "head": {
-                "type": "DINOHead",
-                "out_dim": 512,
-                "use_bn": False,
-            },
-        }
-    }
-    student, teacher = build_model(cfg, device="cpu")
-    x = torch.randn(2, 3, 224, 224)
-    out = student(x)
-    assert out.shape == (2, 512)
-
-
 def test_build_loss_optimizer_and_schedulers():
     cfg = {
         "model": {

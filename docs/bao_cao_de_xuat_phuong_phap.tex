@@ -1,0 +1,111 @@
+\documentclass[10pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
+\usepackage[vietnamese]{babel}
+\usepackage{amsmath,amssymb,amsfonts,bm}
+\usepackage[left=1.4cm,right=1.4cm,top=0.9cm,bottom=0.9cm]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\definecolor{primaryblue}{RGB}{20, 75, 155}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=primaryblue,
+    citecolor=primaryblue,
+    urlcolor=primaryblue
+}
+
+\pagestyle{empty}
+\setlength{\parskip}{0.15em}
+\setlength{\parindent}{0pt}
+
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{0.3em}{0.15em}
+\titleformat{\section}{\normalsize\bfseries\color{primaryblue}}{\thesection.}{0.4em}{}
+
+\begin{document}
+\small
+
+% ==========================================
+% 1. GIẢ THUYẾT ĐẶT RA
+% ==========================================
+\section{Giả thuyết Nghiên cứu (Research Hypothesis)}
+
+\textbf{Vấn đề thực tế:} Trong kiến trúc Plain ViT \cite{dosovitskiy2020image} của mô hình tự giám sát \textbf{DINO} \cite{caron2021emerging}, việc tính \textit{Full Self-Attention} $\mathcal{O}(N^2)$ trên mọi Attention Head gây dư thừa tính toán lớn vì phần lớn các head sau khi hội tụ chỉ tập trung vào vùng lân cận sát patch truy vấn. 
+\textbf{Giả thuyết đặt ra:} Thay vì áp dụng \textbf{Dense Attention} cho tất cả các head, ta phân tách tường minh $H$ Attention Heads trong mỗi tầng của ViT thành các nhóm \textbf{Sliding-Window 2D có kích thước kernel khác nhau} (ví dụ: nhóm nhìn gần $3\times 3$, nhóm nhìn tầm trung $5\times 5$ hoặc $7\times 7$ trích xuất trực tiếp qua toán tử trượt \texttt{Unfold}) kết hợp với \textbf{Cầu nối toàn cục qua token \texttt{[CLS]}} (và/hoặc một nhóm nhỏ \textit{Global Dense Heads}). Khi đó:
+\begin{enumerate}[leftmargin=1.4em, itemsep=0pt, topsep=1pt]
+    \item \textbf{Công thức tính Attention cục bộ đa tỷ lệ (loại bỏ hoàn toàn mask $-\infty$ và \texttt{topk}):} Với mỗi patch $i \in \{1,\dots,N_p\}$ trên nhóm head có cửa sổ $k_g \times k_g$ ($k_g \in \{3, 5, 7\}$), ta chỉ gom đúng $k_g^2$ khóa lân cận $\mathcal{N}_{k_g}(i)$ cùng với khóa của token phân loại $\bm{k}_{\mathrm{CLS}}$:
+    \vspace{-0.4em}
+    \begin{equation*}
+        \widetilde{\bm{K}}_g(i) = \Big[\, \bm{k}_{\mathrm{CLS}} \;\Big\Vert\; \{\bm{k}_j\}_{j \in \mathcal{N}_{k_g}(i)} \,\Big] \in \mathbb{R}^{(1 + k_g^2)\times d_k}, \qquad
+        \bm{y}_i^{(g)} = \mathrm{Softmax}\!\left(\frac{\bm{q}_i \widetilde{\bm{K}}_g(i)^\top}{\sqrt{d_k}}\right)\widetilde{\bm{V}}_g(i)
+    \vspace{-0.4em}
+    \end{equation*}
+    \item \textbf{Hiệu quả kỳ vọng:} Trên cấu hình \texttt{ViT-Small} ($H=6, N=197$), thiết kế phân tách head (ví dụ: 2 head $3\times 3$ + 2 head $5\times 5$ + 2 head Dense, hoặc 3 nhóm cửa sổ $3\times 3, 5\times 5, 7\times 7$) giúp \textbf{giảm từ 47.2\% đến 85.0\% số phép tính tương tác cặp $(Q_i, K_j)$} với overhead phụ bằng $0$, trong khi vẫn bảo toàn khả năng truyền ngữ cảnh toàn cục qua \texttt{[CLS]} và định vị biên vật thể của DINO.
+\end{enumerate}
+
+% ==========================================
+% 2. CƠ SỞ LÝ THUYẾT & CÁC PAPER ĐÃ IMPLEMENT
+% ==========================================
+\section{Cơ sở Lý thuyết \& Các Bài báo Liên quan đã Triển khai}
+
+Phương pháp đề xuất được hậu thuẫn bởi các phân tích lý thuyết về cấu trúc biểu diễn của ViT và kế thừa trực tiếp từ các công trình về Sparse / Multi-Scale Window Attention sau:
+
+\begin{itemize}[leftmargin=1.3em, itemsep=1pt, topsep=1pt]
+    \item \textbf{Cơ sở lý thuyết trên ViT -- Raghu et al. (NeurIPS 2021) \cite{raghu2021vision}:} Phân tích độ tương đồng CKA và khoảng cách chú ý (\textit{Mean Attention Distance}) chứng minh rằng: (1) Ngay từ các tầng đầu tiên, các head của ViT tự nhiên phân hóa thành các khoảng cách chú ý rất khác nhau (cục bộ và toàn cục), và việc học chú ý cục bộ ở tầng sớm là điều kiện tiên quyết để đạt hiệu năng cao; (2) Nhờ tách biệt việc gom nhãn toàn cục sang token \texttt{[CLS]} (với sự chuyển pha rõ rệt qua kết nối tắt ở nửa sau mạng), các spatial tokens của ViT giữ được thông tin định vị không gian sắc nét ở tầng cuối.
+    \item \textbf{Nền tảng Sparse Attention \& Hiệu ứng Trọng số Đa tỷ lệ -- Child et al. (2019) \cite{child2019generating} \& MSWA (01/2025) \cite{xu2025mswa}:} \textit{Sparse Transformer} \cite{child2019generating} đặt nền móng phân rã ma trận attention thành các mẫu cục bộ. Gần đây nhất, \textbf{MSWA} \cite{xu2025mswa} chia các head trong cùng một tầng thành 4 nhóm cửa sổ trượt $\{w_l/4, w_l/2, w_l, 2w_l\}$ (\textit{MSWA-h}) và tăng dần cửa sổ từ tầng nông lên tầng sâu (\textit{MSWA-l}). Cách chia này tạo ra hiệu ứng \textit{Implicit Weighted Emphasis}: vùng sát tâm truy vấn được chú ý bởi 100\% số head, còn vùng xa giảm dần (75\%, 50\%, 25\%), giúp vượt hiệu năng Sliding Window đồng nhất trong khi chỉ dùng $87.9\%$ chi phí.
+    \item \textbf{Nén thông tin qua Cửa sổ Trượt -- SWAT (02/2025) \cite{fu2025swat} \& SigMa (ICLR 2025) \cite{ramapuram2025theory}:} Chỉ ra hiện tượng \textit{Attention Sink} và tính chất triệt tiêu (\textit{Winner-Takes-Most}) của hàm \texttt{Softmax} làm mất thông tin khi trượt cửa sổ qua nhiều tầng; từ đó đề xuất thay bằng hàm \texttt{Sigmoid} kết hợp thiên kiến vị trí (RoPE / ALiBi) để giữ mật độ thông tin dày đặc trong cửa sổ.
+\end{itemize}
+
+\textbf{Bảng tổng hợp các bài báo đã triển khai cửa sổ trượt / đa tỷ lệ theo Head và điểm khác biệt của đề xuất:}
+
+{\footnotesize
+\renewcommand{\arraystretch}{1.05}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash\bfseries}p{3.2cm} >{\raggedright\arraybackslash}p{4.5cm} >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Bài báo Reference} & \textbf{Cơ chế đã Implement trong Paper} & \textbf{Giới hạn \& Điểm khác biệt của Phương pháp Đề xuất} \\
+\midrule
+Swin \cite{liu2021swin} (ICCV'21) \& NAT \cite{hassani2023neighborhood} (CVPR'23) & Cửa sổ dịch chuyển (Swin) hoặc trượt 2D thực sự (NAT) nhưng \textbf{cùng kích thước $k\times k$} cho mọi head. & Mọi head có cùng trường nhìn, thiếu tính đa tỷ lệ trong cùng một tầng; cấu trúc phân cấp phá vỡ Plain ViT của DINO. \\
+\addlinespace[1pt]
+DilateFormer \cite{jiao2023dilateformer} (IEEE TMM'23) & Chia nhóm head chạy cửa sổ trượt $3\times 3$ với các \textbf{độ giãn (dilation $r=1,2,3$)} khác nhau. & Giữ cố định 9 điểm ($3\times 3$) và nhảy cóc gây hiệu ứng bàn cờ (\textit{gridding artifacts}), làm đứt gãy biên vật thể trong DINO. \\
+\addlinespace[1pt]
+DW-ViT \cite{ren2022beyond} (CVPR'22) \& VSA \cite{zhang2022vsa} (ECCV'22) & Gán kích thước cửa sổ khác nhau cho các nhóm head trên Swin (DW-ViT) hoặc học hồi quy cửa sổ (VSA). & Dùng cửa sổ không giao nhau (\textit{non-overlapping}) hoặc tốn mạng phụ nội suy; chưa xét bài toán tự giám sát và cầu nối \texttt{[CLS]}. \\
+\addlinespace[1pt]
+StyleNAT \cite{walton2022stylenat} (arXiv'22) & \textit{Variadic Attention Heads}: gán kernel trượt 2D và dilation khác nhau cho từng head trên mạng StyleGAN. & Chỉ áp dụng cho sinh ảnh GAN; không có cơ chế định tuyến toàn cục cho token \texttt{[CLS]} và Multi-Crop 2D RoPE của DINO. \\
+\addlinespace[1pt]
+MSWA \cite{xu2025mswa} (01/2025) \& SWAT \cite{fu2025swat} (02/2025) & Chia nhóm head theo kích thước cửa sổ $\{w/4, w/2, w, 2w\}$ (MSWA) và Sigmoid + RoPE (SWAT) cho LLM. & Mới chỉ triển khai cho \textbf{chuỗi văn bản 1D (Causal Mask)}; chưa mở rộng sang lưới 2D đẳng hướng và token \texttt{[CLS]} của ViT. \\
+\bottomrule
+\end{tabularx}
+}
+
+% ==========================================
+% COMPACT REFERENCES
+% ==========================================
+\vspace{-0.4em}
+\renewcommand{\refname}{\small\color{primaryblue}Tài liệu Tham khảo (References)}
+\begin{thebibliography}{99}
+\scriptsize
+\setlength{\itemsep}{-1.5pt}
+\setlength{\parskip}{0pt}
+
+\bibitem{raghu2021vision} M.~Raghu \textit{et al.}, ``Do Vision Transformers See Like Convolutional Neural Networks?,'' \textit{NeurIPS}, 2021 (\texttt{arXiv:2108.08810}).
+\bibitem{xu2025mswa} Y.~Xu \textit{et al.}, ``MSWA: Refining Local Attention with Multi-Scale Window Attention,'' \textit{arXiv:2501.01039}, Jan. 2025.
+\bibitem{fu2025swat} Z.~Fu \textit{et al.}, ``Sliding Window Attention Training for Efficient Large Language Models (SWAT),'' \textit{arXiv:2502.18845}, Feb. 2025.
+\bibitem{child2019generating} R.~Child, S.~Gray, A.~Radford, and I.~Sutskever, ``Generating Long Sequences with Sparse Transformers,'' \textit{arXiv:1904.10509}, 2019.
+\bibitem{caron2021emerging} M.~Caron \textit{et al.}, ``Emerging Properties in Self-Supervised Vision Transformers (DINO),'' \textit{ICCV}, 2021 (\texttt{arXiv:2104.14294}).
+\bibitem{dosovitskiy2020image} A.~Dosovitskiy \textit{et al.}, ``An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale,'' \textit{ICLR}, 2021 (\texttt{arXiv:2010.11929}).
+\bibitem{liu2021swin} Z.~Liu \textit{et al.}, ``Swin Transformer: Hierarchical Vision Transformer using Shifted Windows,'' \textit{ICCV}, 2021 (\texttt{arXiv:2103.14030}).
+\bibitem{hassani2023neighborhood} A.~Hassani \textit{et al.}, ``Neighborhood Attention Transformer (NAT),'' \textit{CVPR}, 2023 (\texttt{arXiv:2204.07143}).
+\bibitem{jiao2023dilateformer} J.~Jiao \textit{et al.}, ``DilateFormer: Multi-Scale Dilated Transformer for Visual Recognition,'' \textit{IEEE Trans. Multimedia}, 2023 (\texttt{arXiv:2302.01791}).
+\bibitem{ren2022beyond} P.~Ren \textit{et al.}, ``Beyond Fixation: Dynamic Window Visual Transformer (DW-ViT),'' \textit{CVPR}, 2022 (\texttt{arXiv:2203.12856}).
+\bibitem{zhang2022vsa} Q.~Zhang \textit{et al.}, ``VSA: Learning Varied-Size Window Attention in Vision Transformers,'' \textit{ECCV}, 2022 (\texttt{arXiv:2204.08446}).
+\bibitem{walton2022stylenat} S.~Walton, A.~Hassani \textit{et al.}, ``Efficient Image Generation with Variadic Attention Heads (StyleNAT),'' \textit{arXiv:2211.05770}, 2022.
+\bibitem{ramapuram2025theory} J.~Ramapuram \textit{et al.}, ``Theory, Analysis, and Best Practices for Sigmoid Self-Attention,'' \textit{ICLR}, 2025 (\texttt{arXiv:2409.04431}).
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,90 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug: Inference 1 Ảnh (ViT-Small Sparse RoPE)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/eval/visualize_attention.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--image_path",
+                "${workspaceFolder}/output/sample.jpg",
+                "--arch",
+                "vit_small_sparse_rope",
+                "--patch_size",
+                "16",
+                "--output_dir",
+                "output"
+            ],
+            "justMyCode": true
+        },
+        {
+            "name": "Debug: Inference 1 Ảnh (ViT-Small Chuẩn)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/eval/visualize_attention.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--image_path",
+                "${workspaceFolder}/output/sample.jpg",
+                "--arch",
+                "vit_small",
+                "--patch_size",
+                "16",
+                "--output_dir",
+                "output"
+            ],
+            "justMyCode": true
+        },
+        {
+            "name": "Debug: Inference 1 Ảnh (Tùy chọn Ảnh & Weights)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/eval/visualize_attention.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--image_path",
+                "${input:imagePath}",
+                "--arch",
+                "vit_small_sparse_rope",
+                "--patch_size",
+                "16",
+                "--pretrained_weights",
+                "${input:weightsPath}",
+                "--output_dir",
+                "output"
+            ],
+            "justMyCode": true
+        }
+    ],
+    "inputs": [
+        {
+            "id": "imagePath",
+            "type": "promptString",
+            "description": "Nhập đường dẫn tới tấm ảnh cần inference:",
+            "default": "output/sample.jpg"
+        },
+        {
+            "id": "weightsPath",
+            "type": "promptString",
+            "description": "Nhập đường dẫn file checkpoint (.pth) (để trống nếu dùng random weights):",
+            "default": ""
+        }
+    ]
+}

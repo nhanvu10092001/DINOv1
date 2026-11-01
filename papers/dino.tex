@@ -6,6 +6,8 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{times}
+\renewcommand{\sfdefault}{lmss}
+\renewcommand{\ttdefault}{lmtt}
 \usepackage{microtype}
 \usepackage{geometry}
 \geometry{margin=1in}
@@ -20,8 +22,8 @@
 \usepackage{xcolor}
 \usepackage{hyperref}
 \usepackage{enumitem}
-\usepackage{algorithm}
-\usepackage{algorithmic}
+% \usepackage{algorithm}
+% \usepackage{algorithmic}
 \usepackage{cite}
 \usepackage{caption}
 \usepackage{subcaption}
@@ -58,7 +60,7 @@
 \title{\textbf{\Large Self-Distillation with Frequency-Adaptive 2D Rotary Position Embeddings and Spatial-Semantic Sparse Attention for Vision Transformers}}
 
 \author{
-  \textbf{Pham Le Cung Nhan Vu}, \textbf{Nguyen Hoang Khang}, and \textbf{Nguyen Hoai Nam}\thanks{Faculty of Data Science, VNUHCM -- University of Science. Contact email: \texttt{25C01014@pos.hcmus.edu.vn}} \\[0.3em]
+  \textbf{Pham Cung Le Nhan Vu}, \textbf{Nguyen Hoang Khang}, and \textbf{Nguyen Hoai Nam}\thanks{Faculty of Data Science, VNUHCM -- University of Science. Contact email: \texttt{25C01014@pos.hcmus.edu.vn}} \\[0.3em]
   Faculty of Data Science \\
   VNUHCM -- University of Science, Ho Chi Minh City, Vietnam
 }
@@ -72,7 +74,7 @@
 % ABSTRACT
 % =============================================================================
 \begin{abstract}
-Self-supervised knowledge distillation without labels, notably pioneered by DINOv1, enables Vision Transformers (ViTs) to learn semantic representations exhibiting emergent scene segmentation and clustering capabilities. However, standard ViTs in self-supervised pipelines rely predominantly on learnable absolute positional embeddings (APEs) and dense multi-head self-attention. This classical formulation suffers from two fundamental limitations: (1) poor geometric generalization when processing multi-scale image crops due to rigid bicubic interpolation artifacts, and (2) quadratic computational complexity paired with diffuse attention dispersion, where uninformative background clutter (e.g., sky, ground) pollutes the central \texttt{[CLS]} representation. In this work, we propose a synergized architectural enhancement for self-supervised Vision Transformers comprising: (i) \textbf{Frequency-Adaptive 2D Rotary Position Embedding (2D RoPE)}, which decomposes spatial coordinate tokens along frequency spectra to balance local high-frequency boundary details with scale-invariant low-frequency global topology, and (ii) \textbf{Spatial-Semantic Sparse Attention}, which unifies local spatial window connectivity ($K_{\text{local}} \times K_{\text{local}}$), dynamic global semantic Top-$K$ routing, and bidirectional \texttt{[CLS]} token dispatch while strictly preserving standard Softmax probability normalization. We evaluate our approach on a modular PyTorch framework under strict compute budgets (single NVIDIA GeForce RTX 3070 8GB GPU), pretraining without labels on an ImageNet subset (\texttt{ImageNet-100} / \texttt{ImageFolder}) for 40 epochs and evaluating downstream representation transferability on CIFAR-10. On the CIFAR-10 benchmark, our model achieves \textbf{73.04\%} $k$-NN Top-1 accuracy (+1.37\% over the baseline 71.67\%) and \textbf{78.57\%} Linear Probing Top-1 accuracy (+1.80\% over 76.77\%). Remarkably, during linear probing, our method achieves \textbf{74.48\%} accuracy by epoch 10 compared to \textbf{62.77\%} for the baseline (+11.71\% convergence acceleration), with \textbf{zero parameter overhead} (exactly 21.67M backbone parameters) and identical theoretical FLOPs (9.20 GFLOPs). Qualitative attention visualizations demonstrate that our model produces sharply delineated object boundaries and effectively suppresses background noise.
+Self-supervised knowledge distillation without labels, notably pioneered by DINOv1, enables Vision Transformers (ViTs) to learn semantic representations exhibiting emergent scene segmentation and clustering capabilities. However, standard ViTs in self-supervised pipelines rely predominantly on learnable absolute positional embeddings (APEs) and dense multi-head self-attention. This classical formulation suffers from two fundamental limitations: (1) poor geometric generalization when processing multi-scale image crops due to rigid bicubic interpolation artifacts, and (2) quadratic computational complexity paired with diffuse attention dispersion, where uninformative background clutter (e.g., sky, ground) pollutes the central \texttt{[CLS]} representation. In this work, we propose a synergized architectural enhancement for self-supervised Vision Transformers comprising: (i) \textbf{Frequency-Adaptive 2D Rotary Position Embedding (2D RoPE)}, which decomposes spatial coordinate tokens along frequency spectra to balance local high-frequency boundary details with scale-invariant low-frequency global topology, and (ii) \textbf{Spatial-Semantic Sparse Attention}, which unifies local spatial window connectivity ($K_{\text{local}} \times K_{\text{local}}$), dynamic global semantic Top-$K$ routing, and bidirectional \texttt{[CLS]} token dispatch while strictly preserving standard Softmax probability normalization. We evaluate our approach in a modular PyTorch framework by pretraining without labels on \textbf{ImageNet-100} for \textbf{190 epochs} on an \textbf{NVIDIA H100 GPU}, and directly evaluating the frozen pretrained model on the \textbf{CIFAR-10} benchmark. On CIFAR-10, our model outperforms the baseline across all evaluation protocols, achieving \textbf{75.97\%} $k$-NN ($k=10$) Top-1 accuracy (+1.56\% over 74.41\%), \textbf{75.31\%} $k$-NN ($k=20$) Top-1 accuracy (+0.97\% over 74.34\%), \textbf{82.60\%} 30-epoch Linear Probing Top-1 accuracy (+2.14\% over 80.46\%), and \textbf{83.87\%} 100-epoch Linear Probing Top-1 accuracy (+2.57\% over 81.30\%). Remarkably, during 30-epoch linear probing, our method reaches \textbf{79.86\%} accuracy by epoch 10 compared to \textbf{73.76\%} for the baseline (+6.10\% convergence acceleration), with \textbf{zero parameter overhead} (exactly 21.67M backbone parameters) and identical theoretical FLOPs (9.20 GFLOPs). Qualitative attention visualizations demonstrate that our model produces sharply delineated object boundaries and effectively suppresses background noise.
 \end{abstract}
 
 \textbf{Keywords:} Self-Supervised Learning, Knowledge Distillation, DINOv1, Vision Transformer, Rotary Position Embedding (RoPE), Sparse Attention, Representation Learning.
@@ -96,8 +98,8 @@ To address these challenges, we introduce an enhanced, resource-efficient self-s
 \begin{itemize}[leftmargin=*]
     \item \textbf{Frequency-Adaptive 2D Rotary Position Embedding (2D RoPE):} We extend Rotary Position Embeddings \cite{su2024roformer} to continuous two-dimensional visual grids with frequency-aware coordinate adaptation. High-frequency dimensions capture fine-grained pixel boundaries using raw coordinates, while low-frequency bands generalize to varying resolutions via normalized coordinates.
     \item \textbf{Spatial-Semantic Sparse Softmax Attention:} We design a composite sparse attention mechanism combining a local 2D Chebyshev spatial window, a dynamic global semantic Top-$K$ candidate selection, and bidirectional \texttt{[CLS]} routing. Additionally, we provide a multi-scale 2D sliding-window variant (\texttt{MultiScale2DWindowAttention}) grouping heads across $3\times 3$, $5\times 5$, $7\times 7$, and full global receptive fields. Both designs retain exact Softmax properties without probability truncation.
-    \item \textbf{Modular Registry and YOLO-Style Model DAG Parser:} We implement a decoupled, clean PyTorch architecture featuring a dynamic component registry (\texttt{MODULES}, \texttt{BACKBONES}, \texttt{HEADS}, \texttt{LOSSES}) and a declarative DAG parser allowing flexible layer definition via YAML configurations.
-    \item \textbf{Rigorous Empirical Validation on Consumer Hardware:} Pretrained strictly on a single NVIDIA GeForce RTX 3070 8GB GPU using Automatic Mixed Precision (AMP) and Gradient Accumulation over an unlabeled ImageNet subset and evaluated via downstream transfer on CIFAR-10, our ViT-Small/16 variant achieves +1.37\% in $k$-NN Top-1 accuracy and +1.80\% in Linear Probing accuracy, demonstrating an +11.71\% convergence acceleration at early probe epochs while maintaining zero parameter overhead.
+    \item \textbf{Modular Registry and Declarative Configuration Builder:} We implement a decoupled, clean PyTorch architecture featuring a dynamic component registry (\texttt{MODULES}, \texttt{BACKBONES}, \texttt{HEADS}, \texttt{LOSSES}, \texttt{OPTIMIZERS}, \texttt{TRANSFORMS}) allowing flexible network and training pipeline instantiation via declarative YAML configurations.
+    \item \textbf{Empirical Validation via ImageNet-100 Pretraining and CIFAR-10 Evaluation:} Pretrained without labels on \textbf{ImageNet-100} for \textbf{190 epochs} on an \textbf{NVIDIA H100 GPU} and directly evaluated on \textbf{CIFAR-10}, our ViT-Small/16 variant achieves \textbf{75.97\%} $k$-NN ($k=10$) Top-1 accuracy (+1.56\%), \textbf{75.31\%} $k$-NN ($k=20$) Top-1 accuracy (+0.97\%), and up to \textbf{83.87\%} Linear Probing Top-1 accuracy (+2.57\% over 81.30\%), demonstrating +6.10\% faster convergence at early probe epochs while maintaining zero parameter overhead.
 \end{itemize}
 
 % =============================================================================
@@ -534,13 +536,13 @@ The attention output is obtained via sparse matrix multiplication:
 \end{equation}
 This formulation guarantees that the attention weights for each query sum strictly to 1, avoiding numerical instabilities and gradient vanishing. Additionally, our framework supports a multi-scale sliding-window attention variant (\texttt{MultiScale2DWindowAttention}) that partitions the $H=6$ heads into multi-scale local receptive fields ($3\times 3$, $5\times 5$, $7\times 7$ via fused 2D \texttt{F.unfold}) alongside global dense heads and a bidirectional \texttt{[CLS]} bridge.
 
-\subsection{Modular Registry and YOLO-Style Model DAG Parser}
+\subsection{Modular Registry and Declarative Configuration Builder}
 \label{subsec:registry_dag}
 
 To support rigorous experimental control and reproducible ablation studies, we built a modular architecture engine consisting of:
 \begin{itemize}[leftmargin=*]
     \item \textbf{Component Registry:} A decorator-based system (\texttt{@REGISTRY.register()}) decoupling class implementations from network construction. Global registries include \texttt{MODULES}, \texttt{BACKBONES}, \texttt{HEADS}, \texttt{LOSSES}, \texttt{OPTIMIZERS}, and \texttt{TRANSFORMS}.
-    \item \textbf{YOLO-Style DAG Parser:} An architecture specification parser that reads hierarchical lists of layer definitions (\texttt{[from, repeats, module, args]}), enabling arbitrary skip-connections, token extraction, and multi-scale branching directly from human-readable YAML configurations without altering training scripts.
+    \item \textbf{Declarative Configuration Builder:} A unified builder pipeline (\texttt{build\_model}, \texttt{build\_loss}, \texttt{build\_optimizer}, \texttt{build\_schedulers}) that instantiates paired Student--Teacher networks, multi-crop wrappers, and cosine schedules directly from human-readable YAML configurations without altering training scripts.
 \end{itemize}
 
 % =============================================================================
@@ -549,24 +551,24 @@ To support rigorous experimental control and reproducible ablation studies, we b
 \section{Experimental Setup}
 \label{sec:experiments}
 
-\subsection{Datasets and Two-Stage Pretraining--Evaluation Protocol}
+\subsection{Pretraining Dataset and Evaluation Pipeline}
 \label{subsec:datasets}
 
-Following the canonical transfer evaluation benchmark of DINOv1 \cite{caron2021emerging}, our experimental pipeline separates unlabeled self-supervised representation learning from downstream classification benchmarks across two distinct stages:
+Following the standard evaluation benchmark of DINOv1 \cite{caron2021emerging}, our experimental workflow consists of self-supervised pretraining on an unlabeled dataset followed directly by frozen-backbone evaluation on CIFAR-10 (with no second-stage backbone fine-tuning):
 
-\begin{enumerate}[leftmargin=*]
-    \item \textbf{Stage 1 --- Unlabeled Self-Supervised Pretraining (\texttt{ImageFolder} / ImageNet Subset):} Self-supervised pretraining (\texttt{train.py}) operates strictly without class labels on an \texttt{ImageFolder} directory (\texttt{data/train}) prepared via our automated Hugging Face Hub ingestion pipeline (\texttt{dino\_datasets/prepare\_subset.py}), supporting \textbf{ImageNet-100} (\texttt{clane9/imagenet-100}, a 100-class subset of ImageNet-1K \cite{deng2009imagenet, tian2020contrastive} containing $\sim$130,000 training images) and \textbf{Tiny-ImageNet} (\texttt{Maysee/tiny-imagenet}, 100,000 images across 200 classes). During pretraining, each unlabeled image is transformed via the DINO multi-crop pipeline (\texttt{DataAugmentationDINO}):
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Unlabeled Self-Supervised Pretraining on ImageNet-100:} Self-supervised pretraining (\texttt{train.py}) is conducted strictly without class labels on \textbf{ImageNet-100} (\texttt{clane9/imagenet-100}, a 100-class subset of ImageNet-1K \cite{deng2009imagenet, tian2020contrastive} containing $\sim$130,000 training images) for \textbf{190 epochs} on an \textbf{NVIDIA H100 GPU}. During pretraining, each unlabeled image is transformed via the DINO multi-crop pipeline (\texttt{DataAugmentationDINO}):
     \begin{itemize}
         \item \textbf{Global Crops:} 2 views sampled with area scale $[0.4, 1.0]$ and resized via bicubic interpolation to $224 \times 224$ pixels ($14 \times 14$ patch grid). Both Teacher and Student networks process these global views.
         \item \textbf{Local Crops:} 6 views sampled with area scale $[0.05, 0.4]$ and resized to $96 \times 96$ pixels ($6 \times 6$ patch grid). Only the Student network processes local views.
         \item \textbf{Photometric Augmentations:} Sequential application of random horizontal flipping ($p=0.5$), color jittering (brightness 0.4, contrast 0.4, saturation 0.2, hue 0.1 with $p=0.8$), random grayscale ($p=0.2$), Gaussian blur ($p=1.0$ for global crop 1, $p=0.1$ for global crop 2, $p=0.5$ for local crops), and solarization ($p=0.2$ on global crop 2).
     \end{itemize}
 
-    \item \textbf{Stage 2 --- Downstream Transfer Evaluation (\textbf{CIFAR-10} / \textbf{CIFAR-100}):} To evaluate the quality and transferability of the learned visual representations (corresponding to Table 6 in Caron et al. \cite{caron2021emerging}), we freeze the pretrained 40-epoch Teacher backbone checkpoints (\texttt{checkpoint0040.pth}) and evaluate them on \textbf{CIFAR-10} \cite{krizhevsky2009cifar}, which comprises 50,000 training images and 10,000 test images across 10 semantic categories (\textit{airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck}). The evaluation pipeline (\texttt{eval/eval\_knn.py} and \texttt{eval/eval\_linear.py}) also natively supports \textbf{CIFAR-100} (100 classes) and standard \texttt{ImageFolder} validation splits. During evaluation, images are resized to $256 \times 256$, center-cropped to $224 \times 224$, and normalized using standard ImageNet statistics.
-\end{enumerate}
+    \item \textbf{Model Evaluation on CIFAR-10:} After completing the 190-epoch pretraining on ImageNet-100, we directly freeze the pretrained Teacher backbone and evaluate the learned visual representations on \textbf{CIFAR-10} \cite{krizhevsky2009cifar} (\texttt{eval/eval\_knn.py} and \texttt{eval/eval\_linear.py}), which comprises 50,000 training images and 10,000 test images across 10 semantic categories (\textit{airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck}). During evaluation, images are resized to $256 \times 256$, center-cropped to $224 \times 224$, and normalized using standard ImageNet statistics.
+\end{itemize}
 
 \subsection{Hardware and Hyperparameter Specifications}
-All pretraining and evaluation experiments were executed on a single consumer workstation equipped with one \textbf{NVIDIA GeForce RTX 3070 GPU (8GB VRAM)} and an x86-64 multi-core processor.
+Self-supervised pretraining was executed on an \textbf{NVIDIA H100 GPU} for \textbf{190 epochs} using PyTorch Automatic Mixed Precision (AMP). Architectural and training hyperparameters are summarized in Table \ref{tab:hyperparams}.
 
 \begin{table}[ht]
 \centering
@@ -586,10 +588,10 @@ MLP Expansion Ratio & 4.0 (Hidden dimension 1536) \\
 Projection Head (DINOHead) & 3-layer MLP (hidden 2048, bottleneck 256, out 16384) \\
 Positional Embedding & Frequency-Adaptive 2D RoPE (\texttt{adaptive\_2d}) \\
 Sparse Attention Settings & $K_{\text{local}} = 3$, $K_{\text{semantic}} = 16$, Full \texttt{[CLS]} Routing \\
-Pretraining Dataset Pipeline & Unlabeled \texttt{ImageFolder} (\texttt{clane9/imagenet-100} subset) \\
-Downstream Benchmark & CIFAR-10 (50,000 train / 10,000 test, 10 classes) \\
-Hardware & 1 $\times$ NVIDIA GeForce RTX 3070 (8GB VRAM) \\
-Precision & PyTorch Automatic Mixed Precision (AMP fp16) \\
+Pretraining Dataset & Unlabeled \textbf{ImageNet-100} (\texttt{clane9/imagenet-100}, $\sim$130k images) \\
+Evaluation Benchmark & \textbf{CIFAR-10} (50,000 train / 10,000 test, 10 classes) \\
+Pretraining Hardware & \textbf{NVIDIA H100 GPU} \\
+Precision & PyTorch Automatic Mixed Precision (AMP) \\
 Local Batch Size per GPU & 32 \\
 Gradient Accumulation Steps & 4 (Effective Batch Size = 128) \\
 Optimizer & AdamW \cite{loshchilov2018decoupled} ($\beta_1 = 0.9, \beta_2 = 0.999$) \\
@@ -598,13 +600,13 @@ Weight Decay Schedule & Cosine ramp ($0.04 \to 0.4$) \\
 Teacher Momentum ($\lambda$) & Cosine ramp from 0.996 to 1.000 \\
 Teacher Temperature ($\tau_t$) & Linear warmup from 0.04 to 0.04 (30 epochs) \\
 Student Temperature ($\tau_s$) & 0.10 (constant) \\
-Total Pretraining Epochs & 40 epochs \\
+Total Pretraining Epochs & \textbf{190 epochs} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\subsection{Downstream Evaluation Protocols}
-Following standard DINO evaluation conventions \cite{caron2021emerging}, representations are evaluated via two non-intrusive protocols:
+\subsection{Evaluation Protocols}
+Following standard DINO evaluation conventions \cite{caron2021emerging}, the frozen pretrained representations are evaluated on CIFAR-10 via two protocols:
 \begin{enumerate}[leftmargin=*]
     \item \textbf{$k$-Nearest Neighbors ($k$-NN) Classifier:} The pre-trained backbone is frozen. L2-normalized features are extracted for all 50,000 training samples and 10,000 test samples of CIFAR-10. Top-1 and Top-5 accuracy are computed using $k=20$ neighbors weighted by cosine similarity temperature $T=0.07$. This protocol requires zero fine-tuning and directly assesses feature clustering quality.
     \item \textbf{Linear Probing:} A single linear classification layer ($384 \to 10$) is trained on top of the frozen backbone for 30 epochs using SGD with momentum 0.9, cosine annealing learning rate starting at 0.1, batch size 256, and pre-extracted feature caching (\texttt{--cache\_features}).
@@ -618,34 +620,39 @@ Following standard DINO evaluation conventions \cite{caron2021emerging}, represe
 
 \subsection{Quantitative Classification Performance}
 
-Table \ref{tab:quantitative_results} compares our proposed architecture against the standard ViT-Small baseline on CIFAR-10 after 40 epochs of self-supervised distillation.
+Table \ref{tab:quantitative_results} compares our proposed architecture against the standard ViT-Small baseline on CIFAR-10 after 190 epochs of self-supervised pretraining on ImageNet-100.
 
 \begin{table}[ht]
 \centering
 \small
-\caption{Downstream classification benchmark on CIFAR-10 using 40-epoch pretrained checkpoints.}
+\caption{Classification benchmark on CIFAR-10 using checkpoints pretrained for 190 epochs on ImageNet-100.}
 \label{tab:quantitative_results}
 \begin{tabular}{lccc}
 \toprule
 \textbf{Evaluation Metric} & \textbf{Default ViT-Small} & \textbf{RoPE + Sparse} & \textbf{Gain ($\Delta$)} \\
 \midrule
-$k$-NN Top-1 ($k=20$) & 71.67\% & \textbf{73.04\%} & \textcolor{darkgreen}{\textbf{+1.37\%}} \\
-$k$-NN Top-5 ($k=20$) & 96.82\% & \textbf{96.87\%} & \textcolor{darkgreen}{\textbf{+0.05\%}} \\
+$k$-NN Top-1 ($k=10$) & 74.41\% & \textbf{75.97\%} & \textcolor{darkgreen}{\textbf{+1.56\%}} \\
+$k$-NN Top-5 ($k=10$) & 96.23\% & \textbf{96.55\%} & \textcolor{darkgreen}{\textbf{+0.32\%}} \\
+$k$-NN Top-1 ($k=20$) & 74.34\% & \textbf{75.31\%} & \textcolor{darkgreen}{\textbf{+0.97\%}} \\
+$k$-NN Top-5 ($k=20$) & 97.42\% & \textbf{97.79\%} & \textcolor{darkgreen}{\textbf{+0.37\%}} \\
+$k$-NN Top-1 ($k=200$) & 70.41\% & \textbf{70.65\%} & \textcolor{darkgreen}{\textbf{+0.24\%}} \\
 \midrule
-Linear Probe Top-1 (Epoch 10) & 62.77\% & \textbf{74.48\%} & \textcolor{darkgreen}{\textbf{+11.71\%}} \\
-Linear Probe Top-1 (Epoch 20) & 75.72\% & \textbf{77.19\%} & \textcolor{darkgreen}{\textbf{+1.47\%}} \\
-Linear Probe Top-1 (Epoch 30 - Final) & 76.77\% & \textbf{78.57\%} & \textcolor{darkgreen}{\textbf{+1.80\%}} \\
+Linear Probe Top-1 (Epoch 10, 30-ep) & 73.76\% & \textbf{79.86\%} & \textcolor{darkgreen}{\textbf{+6.10\%}} \\
+Linear Probe Top-1 (Epoch 20, 30-ep) & 78.61\% & \textbf{81.12\%} & \textcolor{darkgreen}{\textbf{+2.51\%}} \\
+Linear Probe Top-1 (Epoch 30, 30-ep) & 80.46\% & \textbf{82.60\%} & \textcolor{darkgreen}{\textbf{+2.14\%}} \\
+Linear Probe Train Loss (Epoch 30) & 0.5127 & \textbf{0.4521} & \textcolor{darkgreen}{\textbf{-0.0606}} \\
 \midrule
-Linear Probe Train Loss & 0.9151 & \textbf{0.8766} & \textcolor{darkgreen}{\textbf{-0.0385}} \\
+Linear Probe Top-1 (100-ep Standardized) & 81.30\% & \textbf{83.87\%} & \textcolor{darkgreen}{\textbf{+2.57\%}} \\
+Linear Probe Top-5 (100-ep Standardized) & 99.31\% & \textbf{99.43\%} & \textcolor{darkgreen}{\textbf{+0.12\%}} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \paragraph{Key Observations:}
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Consistent Representation Superiority:} Our model outperforms the baseline across all metrics, achieving \textbf{73.04\%} $k$-NN accuracy (+1.37\%) and \textbf{78.57\%} Linear Probe accuracy (+1.80\%).
-    \item \textbf{Convergence Acceleration:} Most remarkably, at epoch 10 of linear probing, our model achieves \textbf{74.48\%} accuracy—an astounding \textbf{+11.71\%} improvement over the baseline's 62.77\%. This demonstrates that features learned under 2D RoPE and Sparse Attention possess significantly higher linear separability earlier in training.
-    \item \textbf{Lower Optimization Loss:} The final linear probing loss is substantially lower (0.8766 vs. 0.9151), indicating tighter within-class clustering and wider margin separation.
+    \item \textbf{Consistent Representation Superiority:} Our model outperforms the baseline across all metrics, achieving \textbf{75.97\%} ($k=10$) and \textbf{75.31\%} ($k=20$) $k$-NN Top-1 accuracy (+1.56\% and +0.97\%), \textbf{82.60\%} 30-epoch Linear Probe accuracy (+2.14\%), and \textbf{83.87\%} 100-epoch standardized Linear Probe accuracy (+2.57\%).
+    \item \textbf{Convergence Acceleration:} At epoch 10 of 30-epoch linear probing ($\text{lr}=0.1$), our model achieves \textbf{79.86\%} accuracy—a \textbf{+6.10\%} improvement over the baseline's 73.76\%. This demonstrates that features learned under 2D RoPE and Sparse Attention possess significantly higher linear separability earlier in training.
+    \item \textbf{Lower Optimization Loss:} The final linear probing training loss is substantially lower (0.4521 vs. 0.5127 at epoch 30; 0.4019 vs. 0.4566 at epoch 100), indicating tighter within-class clustering and wider margin separation.
 \end{itemize}
 
 \subsection{Parameter Complexity and Hardware Profiling}
@@ -715,12 +722,12 @@ We examined four modes for frequency coordinate adaptation:
 \begin{itemize}[leftmargin=*]
     \item \texttt{standard\_2d} ($\alpha_m = 1.0$): Raw coordinates across all channels. While effective for fixed resolutions, transfer across multi-scale crops exhibits slight degradation due to high-frequency domain mismatch.
     \item \texttt{normalized\_2d} ($\alpha_m = 0.0$): Fully normalized coordinates. This mode accommodates resolution shifts but diminishes fine spatial texture sensitivity.
-    \item \texttt{adaptive\_2d} (Proposed): Linear frequency ramp. This mode achieves the highest overall accuracy (+1.37\% $k$-NN), balancing local detail preservation and global scale invariance.
-    \item \texttt{learnable\_2d}: Parameterized $\alpha_m$ via unconstrained logit sigmoid. Yields comparable accuracy to \texttt{adaptive\_2d} (72.95\% $k$-NN) while requiring additional optimization tuning.
+    \item \texttt{adaptive\_2d} (Proposed): Linear frequency ramp. This mode achieves the highest overall accuracy (\textbf{75.31\%} $k$-NN at $k=20$, \textbf{75.97\%} at $k=10$), balancing local detail preservation and global scale invariance.
+    \item \texttt{learnable\_2d}: Parameterized $\alpha_m$ via unconstrained logit sigmoid. Yields comparable accuracy to \texttt{adaptive\_2d} while requiring additional optimization tuning.
 \end{itemize}
 
 \subsection{Sparsity Factor vs. Representation Expressiveness}
-Restricting attention to a $3 \times 3$ local window and $K_{\text{semantic}} = 16$ tokens reduces the active key set per spatial query to $9 + 16 + 1 = 26$ tokens out of 197 total tokens (an 86.8\% reduction in active attention pairs). The fact that this configuration outperforms dense attention (+1.80\% in Linear Probing) demonstrates that dense visual attention contains substantial redundancy, and that inductive spatial-semantic filtering acts as an effective regularizer against background overfitting.
+Restricting attention to a $3 \times 3$ local window and $K_{\text{semantic}} = 16$ tokens reduces the active key set per spatial query to $9 + 16 + 1 = 26$ tokens out of 197 total tokens (an 86.8\% reduction in active attention pairs). The fact that this configuration outperforms dense attention (+2.14\% to +2.57\% in Linear Probing) demonstrates that dense visual attention contains substantial redundancy, and that inductive spatial-semantic filtering acts as an effective regularizer against background overfitting.
 
 % =============================================================================
 % 7. CONCLUSION
@@ -728,7 +735,7 @@ Restricting attention to a $3 \times 3$ local window and $K_{\text{semantic}} = 
 \section{Conclusion}
 \label{sec:conclusion}
 
-In this paper, we presented an enhanced self-supervised Vision Transformer architecture for DINOv1 integrating \textbf{Frequency-Adaptive 2D Rotary Position Embeddings (2D RoPE)} and \textbf{Spatial-Semantic Sparse Attention}. By decoupling spatial frequencies to balance local boundary details with scale-invariant global structure, and filtering dense attention into local, semantic, and bidirectional \texttt{[CLS]} pathways, our method achieves consistent downstream improvements on CIFAR-10 (+1.37\% $k$-NN, +1.80\% Linear Probing) with zero parameter overhead and exact theoretical FLOP parity. Crucially, the representation reaches 74.48\% linear probing accuracy within just 10 epochs (+11.71\% faster convergence).
+In this paper, we presented an enhanced self-supervised Vision Transformer architecture for DINOv1 integrating \textbf{Frequency-Adaptive 2D Rotary Position Embeddings (2D RoPE)} and \textbf{Spatial-Semantic Sparse Attention}. By decoupling spatial frequencies to balance local boundary details with scale-invariant global structure, and filtering dense attention into local, semantic, and bidirectional \texttt{[CLS]} pathways, our method achieves consistent improvements on CIFAR-10 (+1.56\% $k$-NN at $k=10$, +0.97\% at $k=20$, and +2.14\% to +2.57\% in Linear Probing) with zero parameter overhead and exact theoretical FLOP parity. Crucially, the representation reaches 79.86\% linear probing accuracy within just 10 epochs (+6.10\% faster convergence over 73.76\%).
 
 Future work will investigate scaling this architecture to full ImageNet-1K / ImageNet-22K pretraining, integrating register tokens \cite{darcet2024vision}, implementing specialized Triton sparse kernels to recover throughput parity, and evaluating downstream performance on dense spatial tasks such as semantic segmentation and object detection.
 

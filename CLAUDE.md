@@ -1,6 +1,6 @@
 # CLAUDE.md — DINOv1 Self-Supervised Learning Framework
 
-Tài liệu kỹ thuật toàn diện cho repository **DINOv1** (Self-distillation with no labels - Caron et al., 2021) kết hợp hệ thống Registry module hóa, Frequency-Adaptive 2D RoPE, Spatial-Semantic Sparse Attention và YOLO-style DAG parser.
+Tài liệu kỹ thuật toàn diện cho repository **DINOv1** (Self-distillation with no labels - Caron et al., 2021) kết hợp hệ thống Registry module hóa, Frequency-Adaptive 2D RoPE và Spatial-Semantic Sparse Attention.
 
 ---
 
@@ -22,9 +22,6 @@ Repository này là bản triển khai hoàn chỉnh bằng PyTorch của phươ
      - **Local Spatial Window**: Kết nối lân cận trong cửa sổ $K \times K$.
      - **Global Semantic Top-K**: Kết nối $K$ token có độ tương đồng cosine lớn nhất nằm ngoài cửa sổ cục bộ.
      - **Bidirectional CLS Token Routing**: Token `[CLS]` luôn chú ý tới tất cả token và ngược lại.
-4. **YOLO-style Model DAG Parser**:
-   - Cho phép định nghĩa kiến trúc Vision Transformer dạng danh sách lớp `[from, repeats, module, args]` tương tự cú pháp YOLO.
-   - Hỗ trợ phân nhánh, skip-connections, trích xuất token tự động.
 
 ---
 
@@ -35,7 +32,6 @@ DINOv1/
 ├── checkpoints/               # Thư mục lưu checkpoint mô hình (.pth)
 ├── configs/                   # Các tệp cấu hình YAML huấn luyện
 │   ├── dry_run.yaml               # Cấu hình kiểm thử nhanh (2 epochs, synthetic data)
-│   ├── vit_tiny_yolo.yaml         # ViT-Tiny định nghĩa qua YOLO-style layer DAG
 │   ├── vit_small_modular.yaml     # ViT-Small chuẩn với Registry builder
 │   ├── vit_small_200k.yaml        # ViT-Small huấn luyện chu kỳ dài
 │   └── vit_small_sparse_rope.yaml # ViT-Small tích hợp 2D RoPE + Sparse Attention
@@ -62,8 +58,6 @@ DINOv1/
 │   ├── sparse_attention.py        # SpatialSemanticAttention
 │   ├── dino_head.py               # DINOHead (MLP 3 lớp + L2 norm + WeightNorm Linear)
 │   ├── multi_crop_wrapper.py      # MultiCropWrapper gom nhóm crop theo độ phân giải
-│   ├── yolo_layers.py             # Các lớp phụ trợ YOLO: PosEmbedAndClassToken, ExtractToken, LayerNorm1d, Concat
-│   └── yolo_parser.py             # Trình phân tích cú pháp parse_model_layers và YOLOModel
 ├── utils/                     # Tiện ích tính toán & lịch học
 │   ├── __init__.py
 │   ├── schedulers.py              # Cosine scheduler, LRScheduler, get_params_groups (weight decay exclude)
@@ -78,7 +72,6 @@ DINOv1/
 │   ├── test_sparse_attention.py
 │   ├── test_sparse_rope_training.py
 │   ├── test_vit_sparse_rope.py
-│   └── test_yolo_parser.py
 ├── papers/                    # Tài liệu nghiên cứu gốc (dino_v1_2104.14294.pdf)
 ├── data/                      # Thư mục dữ liệu cục bộ (train / val)
 ├── train.py                   # Script thực thi huấn luyện DINO chính
@@ -98,8 +91,8 @@ DINOv1/
   - Hỗ trợ decorator: `@REGISTRY.register()`, `@REGISTRY.register("custom_name")`, hoặc gọi trực tiếp `REGISTRY.register(name, cls)`.
   - Phương thức `build(cfg, **default_args)`: Lấy khóa `type` trong từ điển `cfg` và khởi tạo đối tượng với các tham số tương ứng.
   - Các biến toàn cục:
-    - `MODULES`: Chứa các block, layer cơ bản (`Block`, `PatchEmbed`, `Attention`, `SpatialSemanticAttention`, `FrequencyAdaptive2DRoPE`, `PosEmbedAndClassToken`, v.v.).
-    - `BACKBONES`: Chứa các kiến trúc trích xuất đặc trưng (`VisionTransformer`, `vit_tiny`, `vit_small`, `vit_tiny_sparse_rope`, `vit_small_sparse_rope`, `YOLOModel`).
+    - `MODULES`: Chứa các block, layer cơ bản (`Block`, `PatchEmbed`, `Attention`, `SpatialSemanticAttention`, `FrequencyAdaptive2DRoPE`, v.v.).
+    - `BACKBONES`: Chứa các kiến trúc trích xuất đặc trưng (`VisionTransformer`, `vit_tiny`, `vit_small`, `vit_tiny_sparse_rope`, `vit_small_sparse_rope`).
     - `HEADS`: Chứa các projection head (`DINOHead`).
     - `MODELS`: Chứa các model wrapper (`MultiCropWrapper`).
     - `LOSSES`: Chứa hàm mất mát (`DINOLoss`).
@@ -162,19 +155,6 @@ DINOv1/
 - Nhận danh sách các crop ảnh có kích thước khác nhau (2 ảnh global $224 \times 224$ và 6 ảnh local $96 \times 96$).
 - Gom nhóm (group) các crop có cùng độ phân giải không gian để thực hiện forward theo batch, tối ưu hóa tốc độ GPU và bộ nhớ.
 - Hỗ trợ forward cả tensor đơn lẻ trong giai đoạn kiểm thử / inference.
-
-#### YOLO-style Layer DAG Parser (`models/yolo_parser.py` & `models/yolo_layers.py`)
-- Cho phép xây dựng Vision Transformer bằng cấu trúc danh sách trong YAML:
-  ```yaml
-  backbone:
-    type: YOLOModel
-    layers:
-      - [-1, 1, PatchEmbed, [224, 16, 3, 192]]
-      - [-1, 1, PosEmbedAndClassToken, [192, 196]]
-      - [-1, 12, Block, [192, 3, 4.0, True]]
-      - [-1, 1, LayerNorm1d, [192]]
-      - [-1, 1, ExtractToken, [0]]
-  ```
 
 ---
 
@@ -254,13 +234,10 @@ python dino_datasets/prepare_subset.py --dataset clane9/imagenet-100 --output_di
 # 1. Chạy thử nghiệm nhanh (Dry run)
 python train.py --config configs/dry_run.yaml
 
-# 2. Huấn luyện ViT-Tiny định nghĩa qua YOLO DAG parser
-python train.py --config configs/vit_tiny_yolo.yaml
-
-# 3. Huấn luyện ViT-Small chuẩn qua Modular Registry
+# 2. Huấn luyện ViT-Small chuẩn qua Modular Registry
 python train.py --config configs/vit_small_modular.yaml
 
-# 4. Huấn luyện ViT-Small kết hợp Frequency-Adaptive 2D RoPE & Sparse Attention
+# 3. Huấn luyện ViT-Small kết hợp Frequency-Adaptive 2D RoPE & Sparse Attention
 python train.py --config configs/vit_small_sparse_rope.yaml
 ```
 
@@ -366,7 +343,7 @@ Sau khi đăng ký, chỉ cần chỉ định tên định danh trong trường 
 | `dataset.global_crops_scale` | Khoảng scale cho ảnh global, khuyến nghị `[0.4, 1.0]` |
 | `dataset.local_crops_scale` | Khoảng scale cho ảnh local, khuyến nghị `[0.05, 0.4]` |
 | `dataset.local_crops_number`| Số lượng ảnh crop cục bộ (mặc định: `6`) |
-| `model.backbone.type` | Định danh backbone trong Registry (`vit_small`, `vit_small_sparse_rope`, `YOLOModel`) |
+| `model.backbone.type` | Định danh backbone trong Registry (`vit_small`, `vit_small_sparse_rope`) |
 | `model.backbone.rope_cfg` | Cấu hình RoPE (`mode: adaptive_2d`, `base: 10000.0`, `ref_img_size: 224`) |
 | `model.backbone.sparse_attn_cfg` | Cấu hình Sparse Attention (`k_local_window: 3`, `k_semantic: 16`) |
 | `model.head.out_dim` | Số chiều vector đầu ra của Projection Head (mặc định: `16384`) |
