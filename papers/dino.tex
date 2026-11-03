@@ -57,7 +57,7 @@
 % =============================================================================
 % TITLE & AUTHOR METADATA
 % =============================================================================
-\title{\textbf{\Large Self-Distillation with Frequency-Adaptive 2D Rotary Position Embeddings, Spatial-Semantic Sparse Attention, and Verifiable Group Relative Policy Post-Training for Vision Transformers}}
+\title{\textbf{\Large Self-Distillation with Frequency-Adaptive 2D Rotary Position Embeddings, Spatial-Semantic Sparse Attention, and Verifiable Group Relative Policy Optimization for Vision Transformers}}
 
 \author{
   \textbf{Pham Cung Le Nhan Vu}, \textbf{Nguyen Hoang Khang}, and \textbf{Nguyen Hoai Nam}\thanks{Faculty of Data Science, VNUHCM -- University of Science. Contact email: \texttt{25C01014@pos.hcmus.edu.vn}} \\[0.3em]
@@ -74,7 +74,7 @@
 % ABSTRACT
 % =============================================================================
 \begin{abstract}
-Self-supervised knowledge distillation without labels, notably pioneered by DINOv1, enables Vision Transformers (ViTs) to learn semantic representations exhibiting emergent scene segmentation and clustering capabilities. However, standard ViTs in self-supervised pipelines rely predominantly on learnable absolute positional embeddings (APEs) and dense multi-head self-attention. This classical formulation suffers from three fundamental limitations: (1) poor geometric generalization when processing multi-scale image crops due to rigid bicubic interpolation artifacts, (2) quadratic computational complexity paired with diffuse attention dispersion, where uninformative background clutter (e.g., sky, ground) pollutes the central \texttt{[CLS]} representation, and (3) the absence of an explicit spatial post-training mechanism to suppress residual background activations without human annotations. In this work, we propose a two-stage self-supervised framework for Vision Transformers. In \textbf{Stage 1 (Architectural Pretraining)}, we introduce: (i) \textbf{Frequency-Adaptive 2D Rotary Position Embedding (2D RoPE)}, which decomposes spatial coordinate tokens along frequency spectra to balance local high-frequency boundary details with scale-invariant low-frequency global topology, and (ii) \textbf{Spatial-Semantic Sparse Attention}, which unifies local spatial window connectivity ($K_{\text{local}} \times K_{\text{local}}$), dynamic global semantic Top-$K$ routing, and bidirectional \texttt{[CLS]} token dispatch while strictly preserving standard Softmax probability normalization. In \textbf{Stage 2 (Self-Supervised RLVR Post-Training)}, we introduce \textbf{Unbiased Group Relative Policy Optimization (Dr.\ GRPO)} over a shared-prefix policy wrapper that unlocks only the final two ViT blocks and a lightweight residual patch-gating head ($8.27\%$ of wrapper parameters). Without using any class labels or neural reward models, Stage 2 optimizes verifiable visual rewards combining horizontal-flip Geometric Equivariance IoU, spectral TokenCut foreground compactness, and a target sparsity prior ($\rho_{\text{target}}=0.35$) regularized by exact analytical Bernoulli KL divergence against the frozen Stage-1 reference model. Pretrained without labels on \textbf{ImageNet-100} for \textbf{190 epochs} on an \textbf{NVIDIA H100 GPU} and evaluated on \textbf{CIFAR-10}, our Stage-1 architecture achieves \textbf{75.97\%} $k$-NN ($k=10$) Top-1 accuracy (+1.56\% over 74.41\%), \textbf{75.31\%} $k$-NN ($k=20$) Top-1 accuracy (+0.97\% over 74.34\%), and \textbf{83.98\%} standardized Linear Probing Top-1 accuracy (+2.52\% over 81.46\%) with \textbf{zero parameter overhead} (21.67M backbone parameters, 9.20 GFLOPs). Furthermore, a rigorous $2\times 2$ ablation study across the full CIFAR-10 benchmark demonstrates that Stage-2 Dr.\ GRPO post-training dramatically boosts unsupervised Foreground Mask IoU by \textbf{+20.10\%} on Vanilla DINOv1 ($58.88\% \to 78.98\%$, CorLoc $79.93\% \to 99.91\%$) and \textbf{+16.99\%} on RoPE+Sparse DINOv1 ($55.45\% \to 72.44\%$, CorLoc $69.26\% \to 98.17\%$), while further improving downstream $k$-NN and Linear Probe accuracy.
+Self-supervised knowledge distillation without labels, notably pioneered by DINOv1, enables Vision Transformers (ViTs) to learn semantic representations exhibiting emergent scene segmentation and clustering capabilities. However, standard ViTs in self-supervised pipelines rely predominantly on learnable absolute positional embeddings (APEs) and dense multi-head self-attention. This classical formulation suffers from three fundamental limitations: (1) poor geometric generalization when processing multi-scale image crops due to rigid bicubic interpolation artifacts, (2) quadratic computational complexity paired with diffuse attention dispersion, where uninformative background clutter (e.g., sky, ground) pollutes the central \texttt{[CLS]} representation, and (3) the absence of an explicit patch-level optimization mechanism to suppress residual background activations without human annotations. In this work, we propose a unified self-supervised Vision Transformer framework integrating three complementary innovations: (i) \textbf{Frequency-Adaptive 2D Rotary Position Embedding (2D RoPE)}, which decomposes spatial coordinate tokens along frequency spectra to balance local high-frequency boundary details with scale-invariant low-frequency global topology; (ii) \textbf{Spatial-Semantic Sparse Attention}, which unifies local spatial window connectivity ($K_{\text{local}} \times K_{\text{local}}$), dynamic global semantic Top-$K$ routing, and bidirectional \texttt{[CLS]} token dispatch while strictly preserving standard Softmax probability normalization; and (iii) \textbf{Unbiased Group Relative Policy Optimization (Dr.\ GRPO)}, which formulates foreground patch selection over a shared-prefix policy wrapper unlocking the final two ViT blocks and a lightweight residual patch-gating head ($8.27\%$ of wrapper parameters). Without using any class labels or neural reward models, our Dr.\ GRPO objective optimizes verifiable visual rewards combining horizontal-flip Geometric Equivariance IoU, spectral TokenCut foreground compactness, and a target sparsity prior ($\rho_{\text{target}}=0.35$) regularized by exact analytical Bernoulli KL divergence against a frozen reference policy. Trained without labels on \textbf{ImageNet-100} and evaluated on \textbf{CIFAR-10}, our Frequency-Adaptive 2D RoPE and Spatial-Semantic Sparse Attention backbone achieves \textbf{75.97\%} $k$-NN ($k=10$) Top-1 accuracy (+1.56\% over 74.41\%), \textbf{75.31\%} $k$-NN ($k=20$) Top-1 accuracy (+0.97\% over 74.34\%), and \textbf{83.98\%} standardized Linear Probing Top-1 accuracy (+2.52\% over 81.46\%) with \textbf{zero parameter overhead} (21.67M backbone parameters, 9.20 GFLOPs). Furthermore, a rigorous $2\times 2$ ablation study across the full CIFAR-10 benchmark demonstrates that verifiable Dr.\ GRPO optimization dramatically boosts unsupervised Foreground Mask IoU by \textbf{+20.10\%} on Vanilla DINOv1 ($58.88\% \to 78.98\%$, CorLoc $79.93\% \to 99.91\%$) and \textbf{+16.99\%} on RoPE+Sparse DINOv1 ($55.45\% \to 72.44\%$, CorLoc $69.26\% \to 98.17\%$), while further improving downstream $k$-NN and Linear Probe accuracy.
 \end{abstract}
 
 \textbf{Keywords:} Self-Supervised Learning, Knowledge Distillation, DINOv1, Vision Transformer, Rotary Position Embedding (RoPE), Sparse Attention, Group Relative Policy Optimization (Dr.\ GRPO), Reinforcement Learning with Verifiable Rewards (RLVR).
@@ -91,17 +91,17 @@ Despite these empirical successes, canonical ViT architectures employed in DINOv
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Geometric Brittleness of Absolute Positional Embeddings:} Standard ViTs add learnable 1D or 2D Absolute Positional Embeddings (APEs) to image patch tokens prior to Transformer blocks. In self-supervised multi-crop training \cite{caron2020swav, caron2021emerging}, networks alternate between global crops ($224 \times 224$, $14 \times 14$ patches) and local crops ($96 \times 96$, $6 \times 6$ patches). Resizing static positional vectors via bicubic interpolation degrades relative spatial orientation, distorts high-frequency phase information, and ignores translation equivariance.
     \item \textbf{Attention Dilution in Dense Softmax Attention:} Dense Multi-Head Self-Attention scales quadratically $\mathcal{O}(N^2)$ with the patch sequence length $N$. More critically, fully dense attention allows semantic tokens to disperse attention mass indiscriminately over extensive background regions (such as cloudy skies or uniform pastures). This leads to representational pollution of the \texttt{[CLS]} token, hindering downstream classification and fine-grained boundary segmentation.
-    \item \textbf{Residual Background Leakage After Global Self-Distillation:} Because the DINO cross-entropy objective operates solely on global \texttt{[CLS]} probability projections, pretraining lacks an explicit spatial verification signal at the patch level. Consequently, converged checkpoints still exhibit non-trivial attention mass on co-occurring background contexts, and standard fine-tuning requires labeled segmentation masks.
+    \item \textbf{Residual Background Leakage Under Global Self-Distillation:} Because the DINO cross-entropy objective operates solely on global \texttt{[CLS]} probability projections, it lacks an explicit spatial verification signal at the patch level. Consequently, converged representations still exhibit non-trivial attention mass on co-occurring background contexts, whereas conventional spatial refinement requires supervised segmentation annotations.
     \item \textbf{High Compute Overhead in Self-Supervised Training:} State-of-the-art SSL pipelines frequently require massive GPU clusters (e.g., 8 to 64 V100/A100 GPUs), creating substantial barriers for individual researchers and academic laboratories constrained by consumer hardware (e.g., 8GB--16GB VRAM).
 \end{enumerate}
 
-To address these challenges, we introduce a two-stage self-supervised Vision Transformer framework integrating geometric-sparse pretraining with label-free reinforcement policy post-training. Our primary contributions are summarized as follows:
+To address these challenges, we propose a unified self-supervised Vision Transformer framework that synergizes frequency-adaptive geometric encoding, structured spatial-semantic sparsity, and label-free reinforcement policy optimization. Our primary contributions are summarized as follows:
 \begin{itemize}[leftmargin=*]
     \item \textbf{Frequency-Adaptive 2D Rotary Position Embedding (2D RoPE):} We extend Rotary Position Embeddings \cite{su2024roformer} to continuous two-dimensional visual grids with frequency-aware coordinate adaptation. High-frequency dimensions capture fine-grained pixel boundaries using raw coordinates, while low-frequency bands generalize to varying resolutions via normalized coordinates.
     \item \textbf{Spatial-Semantic Sparse Softmax Attention:} We design a composite sparse attention mechanism combining a local 2D Chebyshev spatial window, a dynamic global semantic Top-$K$ candidate selection, and bidirectional \texttt{[CLS]} routing. Additionally, we provide a multi-scale 2D sliding-window variant (\texttt{MultiScale2DWindowAttention}) grouping heads across $3\times 3$, $5\times 5$, $7\times 7$, and full global receptive fields. Both designs retain exact Softmax properties without probability truncation.
-    \item \textbf{Stage-2 Self-Supervised Post-Training via Dr.\ GRPO:} We formulate foreground patch selection in pretrained DINO backbones as a Reinforcement Learning with Verifiable Rewards (RLVR) problem using Unbiased Group Relative Policy Optimization (\texttt{DrGRPOLoss}) \cite{shao2024deepseekmath, liu2025drgrpo}. By sampling groups of binary patch masks from a shared-prefix policy wrapper (\texttt{DINOGRPOPolicyWrapper}) and optimizing a purely self-supervised reward—combining horizontal-flip Geometric Equivariance IoU, spectral TokenCut compactness \cite{wang2022tokencut}, and target sparsity—we sharpen object localization and feature quality without human labels.
+    \item \textbf{Verifiable Foreground Policy Optimization via Dr.\ GRPO:} We formulate foreground patch selection in DINO backbones as a Reinforcement Learning with Verifiable Rewards (RLVR) problem using Unbiased Group Relative Policy Optimization (\texttt{DrGRPOLoss}) \cite{shao2024deepseekmath, liu2025drgrpo}. By sampling groups of binary patch masks from a shared-prefix policy wrapper (\texttt{DINOGRPOPolicyWrapper}) and optimizing a purely self-supervised reward—combining horizontal-flip Geometric Equivariance IoU, spectral TokenCut compactness \cite{wang2022tokencut}, and target sparsity—we sharpen object localization and feature quality without human labels.
     \item \textbf{Modular Registry and Declarative Configuration Builder:} We implement a decoupled, clean PyTorch architecture featuring a dynamic component registry (\texttt{MODULES}, \texttt{BACKBONES}, \texttt{HEADS}, \texttt{MODELS}, \texttt{LOSSES}, \texttt{OPTIMIZERS}, \texttt{TRANSFORMS}) allowing flexible network and training pipeline instantiation via declarative YAML configurations.
-    \item \textbf{Comprehensive Stage-1 and $2\times 2$ Stage-2 Empirical Validation:} Pretrained without labels on \textbf{ImageNet-100} for \textbf{190 epochs} on an \textbf{NVIDIA H100 GPU} and evaluated on \textbf{CIFAR-10}, our Stage-1 ViT-Small/16 variant achieves \textbf{75.97\%} $k$-NN ($k=10$) Top-1 accuracy (+1.56\%), \textbf{75.31\%} $k$-NN ($k=20$) Top-1 accuracy (+0.97\%), and \textbf{83.98\%} Linear Probing Top-1 accuracy (+2.52\% over 81.46\%) with zero parameter overhead. Furthermore, our $2\times 2$ ablation study (Architecture $\times$ Stage-2 Dr.\ GRPO) on full CIFAR-10 demonstrates gains of \textbf{+16.99\% to +20.10\%} in unsupervised Foreground Mask IoU (reaching up to \textbf{99.91\%} CorLoc) alongside consistent downstream classification improvements.
+    \item \textbf{Comprehensive Architectural and $2\times 2$ Ablation Validation:} Trained without labels on \textbf{ImageNet-100} and evaluated on \textbf{CIFAR-10}, our RoPE+Sparse ViT-Small/16 backbone achieves \textbf{75.97\%} $k$-NN ($k=10$) Top-1 accuracy (+1.56\%), \textbf{75.31\%} $k$-NN ($k=20$) Top-1 accuracy (+0.97\%), and \textbf{83.98\%} Linear Probing Top-1 accuracy (+2.52\% over 81.46\%) with zero parameter overhead. Furthermore, our $2\times 2$ ablation study (Architecture $\times$ Dr.\ GRPO) on full CIFAR-10 demonstrates gains of \textbf{+16.99\% to +20.10\%} in unsupervised Foreground Mask IoU (reaching up to \textbf{99.91\%} CorLoc) alongside consistent downstream classification improvements.
 \end{itemize}
 
 % =============================================================================
@@ -543,13 +543,13 @@ The attention output is obtained via sparse matrix multiplication:
 \end{equation}
 This formulation guarantees that the attention weights for each query sum strictly to 1, avoiding numerical instabilities and gradient vanishing. Additionally, our framework supports a multi-scale sliding-window attention variant (\texttt{MultiScale2DWindowAttention}) that partitions the $H=6$ heads into multi-scale local receptive fields ($3\times 3$, $5\times 5$, $7\times 7$ via fused 2D \texttt{F.unfold}) alongside global dense heads and a bidirectional \texttt{[CLS]} bridge.
 
-\subsection{Stage-2 Self-Supervised Post-Training via Dr.\ GRPO}
+\subsection{Verifiable Foreground Policy Optimization via Dr.\ GRPO}
 \label{subsec:grpo_method}
 
-While Stage-1 DINO self-distillation aligns global \texttt{[CLS]} distributions across views, it lacks an explicit patch-level objective to suppress residual background activations. To refine spatial object localization and representation quality without human annotations or neural reward models, we introduce a Stage-2 Reinforcement Learning with Verifiable Rewards (RLVR) post-training pipeline based on Unbiased Group Relative Policy Optimization (Dr.\ GRPO) \cite{shao2024deepseekmath, liu2025drgrpo} (illustrated in Figure \ref{fig:grpo_pipeline}).
+While DINO self-distillation aligns global \texttt{[CLS]} distributions across views, it lacks an explicit patch-level objective to suppress residual background activations. To refine spatial object localization and representation quality without human annotations or neural reward models, we formulate foreground patch selection as a Reinforcement Learning with Verifiable Rewards (RLVR) problem using Unbiased Group Relative Policy Optimization (Dr.\ GRPO) \cite{shao2024deepseekmath, liu2025drgrpo} (illustrated in Figure \ref{fig:grpo_pipeline}).
 
 % -----------------------------------------------------------------------------
-% FIGURE 3: STAGE-2 DR. GRPO SELF-SUPERVISED RLVR PIPELINE
+% FIGURE 3: DR. GRPO VERIFIABLE POLICY OPTIMIZATION PIPELINE
 % -----------------------------------------------------------------------------
 \begin{figure*}[t!]
 \centering
@@ -585,7 +585,7 @@ While Stage-1 DINO self-distillation aligns global \texttt{[CLS]} distributions 
 
 \node[greenbox, minimum width=3.6cm, minimum height=1.4cm, below right=0.35cm and 1.1cm of prefix] (ref_net) {
     \textbf{Frozen Reference $\pi_{\text{ref}}$}\\
-    Stage-1 Blocks $10, 11$ + \texttt{norm}\\
+    Pretrained Blocks $10, 11$ + \texttt{norm}\\
     {\scriptsize Epoch 190 Anchor (\texttt{ref\_model})}\\
     {\scriptsize + Horizontal Flip Branch $T^{-1}(\pi_\theta(T(I)))$}
 };
@@ -609,7 +609,7 @@ While Stage-1 DINO self-distillation aligns global \texttt{[CLS]} distributions 
 % 5. Dr. GRPO + Self-Distill Objective
 \coordinate (mid_rl) at ($(rollout.east)!0.5!(rewards.east)$);
 \node[redbox, minimum width=3.8cm, minimum height=2.5cm, right=1.0cm of mid_rl] (grpo_loss) {
-    \textbf{Stage-2 Dr.\ GRPO Objective}\\[3pt]
+    \textbf{Verifiable Dr.\ GRPO Objective}\\[3pt]
     Unbiased Advantage:\\
     {\scriptsize $A^{(g)} = R^{(g)} - \frac{1}{G}\sum_{j=1}^G R^{(j)}$}\\[3pt]
     Asymmetric Clip ($\epsilon_{\text{low}}=0.20, \epsilon_{\text{high}}=0.28$)\\
@@ -628,12 +628,12 @@ While Stage-1 DINO self-distillation aligns global \texttt{[CLS]} distributions 
 
 \end{tikzpicture}%
 }
-\caption{Overview of the Stage-2 Self-Supervised RLVR Post-Training pipeline (\texttt{DINOGRPOPolicyWrapper} and \texttt{DrGRPOLoss}). Early ViT blocks ($0\dots 9$) are frozen and shared in a single \texttt{no\_grad} pass. The active policy unlocks only the last 2 blocks and a lightweight residual \texttt{policy\_gate}, sampling $G=8$ binary foreground masks per image and optimizing label-free verifiable visual rewards alongside exact Bernoulli KL regularization.}
+\caption{Overview of the Verifiable Dr.\ GRPO Policy Optimization pipeline (\texttt{DINOGRPOPolicyWrapper} and \texttt{DrGRPOLoss}). Early ViT blocks ($0\dots 9$) are frozen and shared in a single \texttt{no\_grad} pass. The active policy unlocks only the last 2 blocks and a lightweight residual \texttt{policy\_gate}, sampling $G=8$ binary foreground masks per image and optimizing label-free verifiable visual rewards alongside exact Bernoulli KL regularization.}
 \label{fig:grpo_pipeline}
 \end{figure*}
 
 \paragraph{1. Shared-Prefix Policy Wrapper (\texttt{DINOGRPOPolicyWrapper}):}
-Given a Stage-1 pretrained Vision Transformer backbone of depth $L=12$ and $N = H_g \times W_g = 196$ spatial patches, we freeze the patch embedding and the first $L - B_{\text{unfrozen}} = 10$ Transformer blocks, unlocking only the final $B_{\text{unfrozen}} = 2$ blocks ($\texttt{blocks[10..11]}$), the final LayerNorm, and a lightweight residual gating MLP $\texttt{policy\_gate}: \mathbb{R}^d \to \mathbb{R}$ ($\text{LayerNorm}(384) \to \text{Linear}(384, 96) \to \text{GELU} \to \text{Linear}(96, 1)$). A frozen copy of the Stage-1 checkpoint serves as the reference policy $\pi_{\text{ref}}$ (\texttt{ref\_model}). Because the first 10 blocks are identical between $\pi_\theta$ and $\pi_{\text{ref}}$, prefix token activations are computed once under \texttt{torch.no\_grad()} and branched only for the final 2 blocks, keeping peak GPU memory below 3\,GB.
+Given a self-supervised Vision Transformer backbone of depth $L=12$ and $N = H_g \times W_g = 196$ spatial patches, we freeze the patch embedding and the first $L - B_{\text{unfrozen}} = 10$ Transformer blocks, unlocking only the final $B_{\text{unfrozen}} = 2$ blocks ($\texttt{blocks[10..11]}$), the final LayerNorm, and a lightweight residual gating MLP $\texttt{policy\_gate}: \mathbb{R}^d \to \mathbb{R}$ ($\text{LayerNorm}(384) \to \text{Linear}(384, 96) \to \text{GELU} \to \text{Linear}(96, 1)$). A frozen copy of the pretrained checkpoint serves as the reference policy $\pi_{\text{ref}}$ (\texttt{ref\_model}). Because the first 10 blocks are identical between $\pi_\theta$ and $\pi_{\text{ref}}$, prefix token activations are computed once under \texttt{torch.no\_grad()} and branched only for the final 2 blocks, keeping peak GPU memory below 3\,GB.
 
 Let $\bar{\mathbf{a}} \in \mathbb{R}^N$ denote the head-averaged self-attention from the \texttt{[CLS]} query to all $N$ spatial patches in the 12th layer ($\bar{a}_p = \frac{1}{H}\sum_{h=1}^H \mathbf{A}_{0, p}^{(h)}$), and let $\mathbf{x}_p \in \mathbb{R}^d$ be the normalized patch token embedding. We standardize $\bar{\mathbf{a}}$ per image and parameterize the independent Bernoulli foreground probability $\pi_{\theta, p} = \pi_\theta(a_p = 1 \mid I)$ for patch $p \in \{1, \dots, N\}$ as:
 \begin{equation}
@@ -666,7 +666,7 @@ For each training image $I$, the behavior policy $\pi_{\theta_{\text{old}}}$ sam
 \end{enumerate}
 The total verifiable reward is $R(\mathbf{a}^{(g)}, I) = w_{\text{eq}} R_{\text{equiv}} + w_{\text{comp}} R_{\text{compact}} + w_{\text{spar}} R_{\text{spar}}$.
 
-\paragraph{3. Unbiased Advantage, Asymmetric Clipping, and Stage-2 Composite Loss:}
+\paragraph{3. Unbiased Advantage, Asymmetric Clipping, and Composite Policy Objective:}
 Following Dr.\ GRPO \cite{liu2025drgrpo}, we compute an unbiased group-centered advantage without dividing by the group standard deviation (which otherwise inflates gradients on low-variance groups):
 \begin{equation}
 A^{(g)} = R(\mathbf{a}^{(g)}, I) - \frac{1}{G}\sum_{j=1}^G R(\mathbf{a}^{(j)}, I)
@@ -684,17 +684,17 @@ where $\mathcal{C}_{\text{align}}(\mathbf{f}_{\text{cls}}, \mathbf{a}^{(g)}) = \
 \end{equation}
 where $\mathbb{D}_{\text{KL}}(\pi_\theta \parallel \pi_{\text{ref}}) = \frac{1}{N}\sum_{p=1}^N \left[\pi_{\theta,p}\log\frac{\pi_{\theta,p}}{\pi_{\text{ref},p}} + (1-\pi_{\theta,p})\log\frac{1-\pi_{\theta,p}}{1-\pi_{\text{ref},p}}\right]$. Finally, we combine $\mathcal{L}_{\text{Dr.GRPO}}$ with a self-supervised foreground-guided distillation term $\mathcal{L}_{\text{FG-Distill}} = 1 - \langle \hat{\mathbf{f}}_{\text{cls}}, \hat{\mathbf{f}}_{\text{target}} \rangle$ (anchoring $\hat{\mathbf{f}}_{\text{cls}}$ to $0.88\,\hat{\mathbf{f}}_{\text{cls}}^{\text{ref}} + 0.12\,\hat{\mathbf{f}}_{\text{fg}}^{\star}$ from the highest-reward rollout $g^\star = \arg\max_g R^{(g)}$) and a binary cross-entropy gate alignment loss $\mathcal{L}_{\text{Gate-Align}}$ toward positive-advantage rollouts:
 \begin{equation}
-\mathcal{L}_{\text{Stage-2}} = \mathcal{L}_{\text{Dr.GRPO}} + 0.30\,\mathcal{L}_{\text{FG-Distill}} + 0.25\,\mathcal{L}_{\text{Gate-Align}}
-\label{eq:stage2_total_loss}
+\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{Dr.GRPO}} + 0.30\,\mathcal{L}_{\text{FG-Distill}} + 0.25\,\mathcal{L}_{\text{Gate-Align}}
+\label{eq:grpo_total_loss}
 \end{equation}
 During inference and evaluation, the refined representation combines the \texttt{[CLS]} embedding with policy-gated foreground pooling ($\mathbf{f}_{\text{eval}} = 0.85\,\mathbf{f}_{\text{cls}} + 0.15\,\mathbf{f}_{\text{fg}}$), and the last-layer \texttt{[CLS]} self-attention map is modulated by $\pi_{\theta, p}$ to yield sharp foreground masks.
 
 \subsection{Modular Registry and Declarative Configuration Builder}
 \label{subsec:registry_dag}
 
-To support rigorous experimental control and reproducible ablation studies across both stages, we built a modular architecture engine consisting of:
+To support rigorous experimental control and reproducible ablation studies across all architectural and optimization components, we built a modular architecture engine consisting of:
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Component Registry:} A decorator-based system (\texttt{@REGISTRY.register()}) decoupling class implementations from network construction. Global registries include \texttt{MODULES}, \texttt{BACKBONES}, \texttt{HEADS}, \texttt{MODELS}, \texttt{LOSSES}, \texttt{OPTIMIZERS}, and \texttt{TRANSFORMS} (registering both Stage-1 modules and Stage-2 \texttt{DINOGRPOPolicyWrapper} and \texttt{DrGRPOLoss}).
+    \item \textbf{Component Registry:} A decorator-based system (\texttt{@REGISTRY.register()}) decoupling class implementations from network construction. Global registries include \texttt{MODULES}, \texttt{BACKBONES}, \texttt{HEADS}, \texttt{MODELS}, \texttt{LOSSES}, \texttt{OPTIMIZERS}, and \texttt{TRANSFORMS} (registering our 2D RoPE, Sparse Attention, \texttt{DINOGRPOPolicyWrapper}, and \texttt{DrGRPOLoss} modules).
     \item \textbf{Declarative Configuration Builder:} A unified builder pipeline (\texttt{build\_model}, \texttt{build\_loss}, \allowbreak\texttt{build\_optimizer}, and \allowbreak\texttt{build\_schedulers}) that instantiates paired Student--Teacher networks, multi-crop wrappers, and cosine schedules directly from human-readable YAML configurations without altering training scripts.
 \end{itemize}
 
@@ -704,54 +704,54 @@ To support rigorous experimental control and reproducible ablation studies acros
 \section{Experimental Setup}
 \label{sec:experiments}
 
-\subsection{Pretraining, Post-Training, and Evaluation Pipeline}
+\subsection{Self-Supervised Training, Policy Optimization, and Evaluation Pipeline}
 \label{subsec:datasets}
 
-Following the standard evaluation benchmark of DINOv1 \cite{caron2021emerging}, our experimental workflow consists of two strictly label-free training stages on ImageNet-100 followed by frozen-backbone evaluation on CIFAR-10:
+Following the standard evaluation benchmark of DINOv1 \cite{caron2021emerging}, our experimental workflow consists of strictly label-free representation learning and verifiable policy optimization on ImageNet-100 followed by frozen-backbone evaluation on CIFAR-10:
 
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Stage-1 Unlabeled Self-Supervised Pretraining on ImageNet-100:} Self-supervised pretraining (\texttt{train.py}) is conducted strictly without class labels on \textbf{ImageNet-100} (\texttt{clane9/imagenet-100}, a 100-class subset of ImageNet-1K \cite{deng2009imagenet, tian2020contrastive} containing $\sim$130,000 training images) for \textbf{190 epochs} on an \textbf{NVIDIA H100 GPU}. During pretraining, each unlabeled image is transformed via the DINO multi-crop pipeline (\texttt{DataAugmentationDINO}):
+    \item \textbf{Unlabeled Self-Supervised Representation Learning on ImageNet-100:} Self-supervised DINO training (\texttt{train.py}) is conducted strictly without class labels on \textbf{ImageNet-100} (\texttt{clane9/imagenet-100}, a 100-class subset of ImageNet-1K \cite{deng2009imagenet, tian2020contrastive} containing $\sim$130,000 training images) for \textbf{190 epochs} on an \textbf{NVIDIA H100 GPU}. During training, each unlabeled image is transformed via the DINO multi-crop pipeline (\texttt{DataAugmentationDINO}):
     \begin{itemize}
         \item \textbf{Global Crops:} 2 views sampled with area scale $[0.4, 1.0]$ and resized via bicubic interpolation to $224 \times 224$ pixels ($14 \times 14$ patch grid). Both Teacher and Student networks process these global views.
         \item \textbf{Local Crops:} 6 views sampled with area scale $[0.05, 0.4]$ and resized to $96 \times 96$ pixels ($6 \times 6$ patch grid). Only the Student network processes local views.
         \item \textbf{Photometric Augmentations:} Sequential application of random horizontal flipping ($p=0.5$), color jittering (brightness 0.4, contrast 0.4, saturation 0.2, hue 0.1 with $p=0.8$), random grayscale ($p=0.2$), Gaussian blur ($p=1.0$ for global crop 1, $p=0.1$ for global crop 2, $p=0.5$ for local crops), and solarization ($p=0.2$ on global crop 2).
     \end{itemize}
 
-    \item \textbf{Stage-2 Self-Supervised Dr.\ GRPO Post-Training on ImageNet-100:} Starting from the Stage-1 epoch-190 checkpoints of both Vanilla \texttt{vit\_small} and proposed \texttt{vit\_small\_sparse\_rope}, we execute 10 epochs of label-free RLVR post-training (\texttt{train\_grpo\_post.py}) on a class-balanced stratified subset of 5,000 unlabeled ImageNet-100 training images (batch size 64, 79 steps/epoch) on an \textbf{NVIDIA Tesla T4 GPU} (16\,GB VRAM). We use dual-rate AdamW optimization: a conservative learning rate ($0.25 \times \text{lr} = 2\times 10^{-5}$) for the last 2 ViT blocks to preserve pretrained representations, and a fast learning rate ($5.0 \times \text{lr} = 4\times 10^{-4}$) for the newly initialized \texttt{policy\_gate}.
+    \item \textbf{Verifiable Dr.\ GRPO Policy Optimization on ImageNet-100:} On the converged 190-epoch checkpoints of both Vanilla \texttt{vit\_small} and proposed \texttt{vit\_small\_sparse\_rope}, we execute 10 epochs of label-free Dr.\ GRPO optimization (\texttt{train\_grpo\_post.py}) on a class-balanced stratified subset of 5,000 unlabeled ImageNet-100 training images (batch size 64, 79 steps/epoch) on an \textbf{NVIDIA Tesla T4 GPU} (16\,GB VRAM). We use dual-rate AdamW optimization: a conservative learning rate ($0.25 \times \text{lr} = 2\times 10^{-5}$) for the last 2 ViT blocks to preserve learned representations, and a fast learning rate ($5.0 \times \text{lr} = 4\times 10^{-4}$) for the newly initialized \texttt{policy\_gate}.
 
     \item \textbf{Downstream Evaluation on CIFAR-10:} After training on ImageNet-100, we freeze the models and evaluate the learned visual representations on the full \textbf{CIFAR-10} benchmark \cite{krizhevsky2009cifar} (\texttt{eval/eval\_knn.py}, \texttt{eval/eval\_linear.py}, and \texttt{eval/eval\_ablation\_2x2.py}), comprising 50,000 training images and 10,000 test images across 10 semantic categories (\textit{airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck}). During evaluation, images are resized to $256 \times 256$, center-cropped to $224 \times 224$, and normalized using standard ImageNet statistics.
 \end{itemize}
 
 \subsection{Hardware and Hyperparameter Specifications}
-Stage-1 pretraining was executed on an \textbf{NVIDIA H100 GPU} for \textbf{190 epochs}, while Stage-2 Dr.\ GRPO post-training was executed for \textbf{10 epochs} using PyTorch Automatic Mixed Precision (AMP). Full architectural and training hyperparameters for both stages are summarized in Table \ref{tab:hyperparams}.
+Self-supervised DINO training was executed on an \textbf{NVIDIA H100 GPU} for \textbf{190 epochs}, while Dr.\ GRPO policy optimization was executed for \textbf{10 epochs} using PyTorch Automatic Mixed Precision (AMP). Full architectural and optimization hyperparameters are summarized in Table \ref{tab:hyperparams}.
 
 \begin{table}[ht]
 \centering
 \small
-\caption{Stage-1 Pretraining and Stage-2 Dr.\ GRPO Post-Training Hyperparameters.}
+\caption{Architectural Self-Distillation and Verifiable Dr.\ GRPO Policy Optimization Hyperparameters.}
 \label{tab:hyperparams}
 \begin{tabularx}{\columnwidth}{lX}
 \toprule
 \textbf{Hyperparameter} & \textbf{Value / Specification} \\
 \midrule
-\multicolumn{2}{l}{\textit{\textbf{Stage-1: DINOv1 Self-Supervised Pretraining (190 Epochs)}}} \\
+\multicolumn{2}{l}{\textit{\textbf{Backbone \& DINO Self-Distillation Hyperparameters (190 Epochs)}}} \\
 Backbone Architecture & Vision Transformer Small (\texttt{ViT-Small/16}, 12 layers, $d=384$, $H=6$) \\
 Positional Embedding & Frequency-Adaptive 2D RoPE (\texttt{adaptive\_2d}, base $10000.0$) \\
 Sparse Attention Settings & $K_{\text{local}} = 3$, $K_{\text{semantic}} = 16$, Bidirectional \texttt{[CLS]} Routing \\
 Projection Head (DINOHead) & 3-layer MLP (hidden 2048, bottleneck 256, out 16384) \\
-Pretraining Dataset \& Hardware & Unlabeled \textbf{ImageNet-100} ($\sim$130k images) on \textbf{NVIDIA H100 GPU} \\
+Training Dataset \& Hardware & Unlabeled \textbf{ImageNet-100} ($\sim$130k images) on \textbf{NVIDIA H100 GPU} \\
 Effective Batch Size & 128 (Local BS = 32, Gradient Accumulation = 4, AMP enabled) \\
-Stage-1 Optimizer \& LR & AdamW ($\beta_1 = 0.9, \beta_2 = 0.999$), Cosine LR $5\times 10^{-4} \to 1\times 10^{-5}$ (10 warmup epochs) \\
+DINO Optimizer \& LR & AdamW ($\beta_1 = 0.9, \beta_2 = 0.999$), Cosine LR $5\times 10^{-4} \to 1\times 10^{-5}$ (10 warmup epochs) \\
 Temperatures \& Momentum & $\tau_t = 0.04$, $\tau_s = 0.10$, EMA momentum $\lambda: 0.996 \to 1.000$ \\
 \midrule
-\multicolumn{2}{l}{\textit{\textbf{Stage-2: Self-Supervised Dr.\ GRPO Post-Training (10 Epochs)}}} \\
+\multicolumn{2}{l}{\textit{\textbf{Verifiable Dr.\ GRPO Policy Optimization Hyperparameters (10 Epochs)}}} \\
 Policy Wrapper (\texttt{DINOGRPOPolicyWrapper}) & Frozen Blocks $0\dots 9$ + Unfrozen Blocks $10, 11$ + \texttt{policy\_gate} ($384\to 96\to 1$) \\
-Stage-2 Trainable Parameters & 3,587,521 / 43,369,153 total wrapper params (\textbf{8.27\%}, $<3$\,GB VRAM) \\
+Policy Trainable Parameters & 3,587,521 / 43,369,153 total wrapper params (\textbf{8.27\%}, $<3$\,GB VRAM) \\
 Group Rollout Size ($G$) & $G = 8$ binary patch masks sampled per image ($N=196$ patches) \\
 Verifiable Reward Mode & \texttt{self\_supervised\_v1}: $w_{\text{eq}}=0.45$, $w_{\text{comp}}=0.35$, $w_{\text{spar}}=0.20$ \\
 Target Foreground Sparsity & $\rho_{\text{target}} = 0.35$ (Initial logit bias $b_{\text{spar}} = -0.619$, scale $s_{\text{attn}} = 1.6$) \\
 Dr.\ GRPO Clipping \& KL Anchor & Asymmetric $\epsilon_{\text{low}} = 0.20, \epsilon_{\text{high}} = 0.28$, Analytical $\beta_{\text{KL}} = 0.04$ \\
-Stage-2 Optimizer \& Dual LRs & AdamW (Base $\text{lr}=8\times 10^{-5}$: Backbone $2\times 10^{-5}$, Gate $4\times 10^{-4}$, Cosine schedule) \\
+Policy Optimizer \& Dual LRs & AdamW (Base $\text{lr}=8\times 10^{-5}$: Backbone $2\times 10^{-5}$, Gate $4\times 10^{-4}$, Cosine schedule) \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -760,7 +760,7 @@ Stage-2 Optimizer \& Dual LRs & AdamW (Base $\text{lr}=8\times 10^{-5}$: Backbon
 Following standard DINO evaluation conventions \cite{caron2021emerging} and unsupervised object discovery benchmarks \cite{wang2022tokencut}, we evaluate frozen models on CIFAR-10 across four complementary metrics:
 \begin{enumerate}[leftmargin=*]
     \item \textbf{$k$-Nearest Neighbors ($k$-NN) Classifier:} The backbone is frozen and L2-normalized features are extracted for all 50,000 training and 10,000 test samples of CIFAR-10. Top-1 and Top-5 accuracy are computed via weighted cosine voting ($T=0.07$ at $k \in \{10, 20, 200\}$).
-    \item \textbf{Linear Probing:} A linear classifier ($384 \to 10$) is trained on frozen features using SGD with momentum 0.9, cosine annealing learning rate, and batch size 256 (100 epochs on standardized features for the Stage-1 main benchmark; 30 epochs with $\text{lr}=0.1$ on raw features in the unified $2\times 2$ ablation suite).
+    \item \textbf{Linear Probing:} A linear classifier ($384 \to 10$) is trained on frozen features using SGD with momentum 0.9, cosine annealing learning rate, and batch size 256 (100 epochs on standardized features for the main architectural benchmark; 30 epochs with $\text{lr}=0.1$ on raw features in the unified $2\times 2$ ablation suite).
     \item \textbf{Unsupervised Foreground Mask IoU (\%):} Thresholding the top $\lfloor \rho_{\text{target}} N \rfloor$ patches of the last-layer \texttt{[CLS]} attention map yields a binary foreground prediction $\hat{\mathbf{m}} \in \{0, 1\}^N$, which is evaluated via mean Intersection-over-Union against the unbiased spectral-contour foreground mask across all 10,000 CIFAR-10 test images.
     \item \textbf{Correct Localization (\texttt{CorLoc}, \%):} The percentage of test images in which the predicted unsupervised foreground mask achieves $\text{IoU} \ge 0.50$ with the target object mask.
 \end{enumerate}
@@ -867,25 +867,25 @@ In the baseline ViT model, attention is diffusely scattered across the sky backg
 \paragraph{2. Horse Class (Figure \ref{fig:attention_visualizations}b):}
 In the baseline, attention responds to general color tones, causing the horse's silhouette to bleed into the grassy background. In our model, attention maps trace the horse's curved back, head, and legs. The high-frequency components of the Frequency-Adaptive 2D RoPE preserve fine-grained spatial coordinates, enabling the network to resolve clear object-background boundaries.
 
-\subsection{\texorpdfstring{$2\times 2$}{2x2} Ablation Study: Architecture \texorpdfstring{$\times$}{x} Stage-2 Dr.\ GRPO Post-Training}
+\subsection{\texorpdfstring{$2\times 2$}{2x2} Ablation Study: Spatial-Semantic RoPE Architecture \texorpdfstring{$\times$}{x} Dr.\ GRPO Optimization}
 \label{subsec:grpo_results}
 
-To isolate the individual and combined contributions of our Stage-1 architectural design (\allowbreak\texttt{vit\_small\_sparse\_rope}) and Stage-2 self-supervised RLVR post-training (\texttt{Dr.\ GRPO}), we conduct a controlled $2\times 2$ ablation study across all four model variants on the full CIFAR-10 dataset (50,000 training / 10,000 test images) using \allowbreak\texttt{eval/eval\_ablation\_2x2.py}. Table \ref{tab:ablation_2x2} reports downstream classification ($k$-NN at $k=20$ and 30-epoch unnormalized Linear Probe with $\text{lr}=0.1$) alongside unsupervised object localization (Foreground Mask IoU and \texttt{CorLoc} at $\text{IoU} \ge 0.50$).
+To isolate the individual and combined contributions of our architectural design (\allowbreak\texttt{vit\_small\_sparse\_rope}) and verifiable policy optimization (\texttt{Dr.\ GRPO}), we conduct a controlled $2\times 2$ ablation study across all four model variants on the full CIFAR-10 dataset (50,000 training / 10,000 test images) using \allowbreak\texttt{eval/eval\_ablation\_2x2.py}. Table \ref{tab:ablation_2x2} reports downstream classification ($k$-NN at $k=20$ and 30-epoch unnormalized Linear Probe with $\text{lr}=0.1$) alongside unsupervised object localization (Foreground Mask IoU and \texttt{CorLoc} at $\text{IoU} \ge 0.50$).
 
 \begin{table*}[t!]
 \centering
 \small
-\caption{$2\times 2$ Ablation Study across Architecture (\texttt{vit\_small} vs.\ \texttt{vit\_small\_sparse\_rope}) and Stage-2 RLVR Post-Training (\texttt{Dr.\ GRPO}) on the full CIFAR-10 benchmark (50,000 train / 10,000 test images).}
+\caption{$2\times 2$ Ablation Study across Backbone Architecture (\texttt{vit\_small} vs.\ \texttt{vit\_small\_sparse\_rope}) and Verifiable Policy Optimization (\texttt{Dr.\ GRPO}) on the full CIFAR-10 benchmark (50,000 train / 10,000 test images).}
 \label{tab:ablation_2x2}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{llcccccc}
 \toprule
-\textbf{Model Variant} & \textbf{Backbone Arch} & \textbf{Stage-2 RLVR} & \textbf{$k$-NN Top-1} & \textbf{$k$-NN Top-5} & \textbf{Linear Probe} & \textbf{Foreground IoU} & \textbf{CorLoc ($\ge 0.5$)} \\
+\textbf{Model Variant} & \textbf{Backbone Arch} & \textbf{Dr.\ GRPO Policy} & \textbf{$k$-NN Top-1} & \textbf{$k$-NN Top-5} & \textbf{Linear Probe} & \textbf{Foreground IoU} & \textbf{CorLoc ($\ge 0.5$)} \\
 \midrule
 1. Vanilla DINOv1 & \texttt{vit\_small} & No & 71.13\% & 96.57\% & 78.07\% & 58.88\% & 79.93\% \\
 2. RoPE+Sparse DINOv1 & \texttt{vit\_small\_sparse\_rope} & No & 71.83\% & 96.98\% & 80.22\% & 55.45\% & 69.26\% \\
-3. Vanilla + Dr.\ GRPO & \texttt{vit\_small} & Dr.\ GRPO & 71.29\% & 96.73\% & 78.44\% & \textbf{78.98\%} & \textbf{99.91\%} \\
-\textbf{4. RoPE+Sparse + Dr.\ GRPO (Ours)} & \texttt{vit\_small\_sparse\_rope} & \textbf{Dr.\ GRPO} & \textbf{72.05\%} & \textbf{97.12\%} & \textbf{80.67\%} & \textbf{72.44\%} & \textbf{98.17\%} \\
+3. Vanilla + Dr.\ GRPO & \texttt{vit\_small} & Yes & 71.29\% & 96.73\% & 78.44\% & \textbf{78.98\%} & \textbf{99.91\%} \\
+\textbf{4. RoPE+Sparse + Dr.\ GRPO (Ours)} & \texttt{vit\_small\_sparse\_rope} & \textbf{Yes} & \textbf{72.05\%} & \textbf{97.12\%} & \textbf{80.67\%} & \textbf{72.44\%} & \textbf{98.17\%} \\
 \midrule
 \multicolumn{3}{l}{\textit{Effect of Dr.\ GRPO on Vanilla DINOv1 (Variant 3 vs.\ 1)}} & \textcolor{darkgreen}{\textbf{+0.16\%}} & \textcolor{darkgreen}{\textbf{+0.16\%}} & \textcolor{darkgreen}{\textbf{+0.37\%}} & \textcolor{darkgreen}{\textbf{+20.10\%}} & \textcolor{darkgreen}{\textbf{+19.98\%}} \\
 \multicolumn{3}{l}{\textit{Effect of Dr.\ GRPO on RoPE+Sparse (Variant 4 vs.\ 2)}} & \textcolor{darkgreen}{\textbf{+0.22\%}} & \textcolor{darkgreen}{\textbf{+0.14\%}} & \textcolor{darkgreen}{\textbf{+0.45\%}} & \textcolor{darkgreen}{\textbf{+16.99\%}} & \textcolor{darkgreen}{\textbf{+28.91\%}} \\
@@ -898,7 +898,7 @@ To isolate the individual and combined contributions of our Stage-1 architectura
 \begin{table}[ht]
 \centering
 \small
-\caption{Stage-2 Dr.\ GRPO Training Dynamics over 10 Self-Supervised RLVR Epochs on ImageNet-100 (evaluated at each epoch on CIFAR-10 validation split).}
+\caption{Dr.\ GRPO Policy Optimization Dynamics over 10 Self-Supervised Epochs on ImageNet-100 (evaluated at each epoch on CIFAR-10 validation split).}
 \label{tab:grpo_dynamics}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{ccccccccc}
@@ -907,7 +907,7 @@ To isolate the individual and combined contributions of our Stage-1 architectura
 \cmidrule(lr){2-5} \cmidrule(lr){6-9}
  & \textbf{Reward} & \textbf{KL Div} & \textbf{$k$-NN (\%)} & \textbf{FG IoU (\%)} & \textbf{Reward} & \textbf{KL Div} & \textbf{$k$-NN (\%)} & \textbf{FG IoU (\%)} \\
 \midrule
-0 (Pre-RL) & --- & 0.0000 & 62.85 & 58.72 & --- & 0.0000 & 64.90 & 55.59 \\
+0 (Init) & --- & 0.0000 & 62.85 & 58.72 & --- & 0.0000 & 64.90 & 55.59 \\
 1 & 0.6613 & 0.1066 & 63.05 & 76.32 & 0.6045 & 0.1172 & 65.20 & 71.17 \\
 2 & 0.7330 & 0.1980 & 63.25 & 77.42 & 0.6561 & 0.2116 & \textbf{65.40} & 71.82 \\
 4 & 0.7348 & 0.2040 & 63.40 & 77.74 & 0.6711 & 0.2420 & 65.10 & 72.31 \\
@@ -922,16 +922,16 @@ To isolate the individual and combined contributions of our Stage-1 architectura
 \begin{figure*}[t!]
 \centering
 \includegraphics[width=\textwidth]{ablation_2x2_attention_grid.png}
-\caption{Qualitative $2\times 2$ Ablation Comparison of last-layer \texttt{[CLS]} self-attention heatmaps across four representative CIFAR-10 categories (\textit{airplane, horse, dog, ship}). From left to right: (1) Original Image, (2) Stage-1 Vanilla DINOv1, (3) Stage-1 RoPE+Sparse DINOv1, (4) Stage-2 Vanilla + Dr.\ GRPO, and (5) Stage-2 RoPE+Sparse + Dr.\ GRPO (Ours). Stage-2 RLVR post-training suppresses residual background noise and concentrates attention mass tightly within true object contours.}
+\caption{Qualitative $2\times 2$ Ablation Comparison of last-layer \texttt{[CLS]} self-attention heatmaps across four representative CIFAR-10 categories (\textit{airplane, horse, dog, ship}). From left to right: (1) Original Image, (2) Vanilla DINOv1, (3) RoPE+Sparse DINOv1, (4) Vanilla + Dr.\ GRPO, and (5) RoPE+Sparse + Dr.\ GRPO (Ours). Verifiable Dr.\ GRPO optimization suppresses residual background noise and concentrates attention mass tightly within true object contours.}
 \label{fig:ablation_2x2_grid}
 \end{figure*}
 
 \paragraph{Analysis of $2\times 2$ Ablation Findings:}
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Massive Improvement in Unsupervised Object Localization:} Before RLVR post-training, Stage-1 RoPE+Sparse concentrates attention on discriminative object sub-parts (e.g., animal heads, aircraft wings), which improves classification (+2.15\% Linear Probe over Vanilla) but yields a slightly lower holistic mask IoU ($55.45\%$ vs.\ $58.88\%$). Applying Stage-2 Dr.\ GRPO resolves this trade-off: Foreground Mask IoU surges by \textbf{+20.10\%} on Vanilla DINOv1 ($58.88\% \to 78.98\%$) and by \textbf{+16.99\%} on RoPE+Sparse DINOv1 ($55.45\% \to 72.44\%$), while \texttt{CorLoc} jumps from $69.26\%$ to \textbf{98.17\%} (+28.91\%) on our RoPE+Sparse backbone and reaches \textbf{99.91\%} on Vanilla+Dr.\ GRPO.
-    \item \textbf{Synergy Between Geometric Pretraining and RLVR Post-Training:} Unlike naive fine-tuning that often degrades pretrained features (catastrophic forgetting), our analytical Bernoulli KL anchor ($\beta_{\text{KL}}=0.04$) and foreground-guided teacher distillation ($\mathcal{L}_{\text{FG-Distill}}$) simultaneously improve downstream classification. Our full model (\texttt{RoPE+Sparse+Dr.GRPO}) achieves the highest classification performance across all four variants: \textbf{72.05\%} $k$-NN Top-1 (+0.92\% over Vanilla), \textbf{97.12\%} $k$-NN Top-5, and \textbf{80.67\%} 30-epoch Linear Probe accuracy (+2.60\% over Vanilla).
-    \item \textbf{Fast, Monotonic RLVR Convergence (Table \ref{tab:grpo_dynamics}):} Across the 10 post-training epochs on ImageNet-100, the mean group reward rises monotonically from $0.6613 \to 0.7443$ (\texttt{def\_grpo}) and $0.6045 \to 0.6826$ (\texttt{rop\_grpo}), while the KL divergence stabilizes cleanly around $0.21\text{--}0.26$, confirming stable policy improvement without policy collapse.
-    \item \textbf{Visual Verification (Figure \ref{fig:ablation_2x2_grid}):} The 5-column visual grid confirms that while Stage-1 models exhibit peripheral attention halos in complex scenes, Stage-2 Dr.\ GRPO variants cleanly segment the full body of the airplane, horse, dog, and ship with near-zero background activation.
+    \item \textbf{Massive Improvement in Unsupervised Object Localization:} Without verifiable policy optimization, RoPE+Sparse concentrates attention on discriminative object sub-parts (e.g., animal heads, aircraft wings), which improves classification (+2.15\% Linear Probe over Vanilla) but yields a slightly lower holistic mask IoU ($55.45\%$ vs.\ $58.88\%$). Incorporating Dr.\ GRPO resolves this trade-off: Foreground Mask IoU surges by \textbf{+20.10\%} on Vanilla DINOv1 ($58.88\% \to 78.98\%$) and by \textbf{+16.99\%} on RoPE+Sparse DINOv1 ($55.45\% \to 72.44\%$), while \texttt{CorLoc} jumps from $69.26\%$ to \textbf{98.17\%} (+28.91\%) on our RoPE+Sparse backbone and reaches \textbf{99.91\%} on Vanilla+Dr.\ GRPO.
+    \item \textbf{Synergy Between Geometric Sparsity and Verifiable Policy Optimization:} Unlike naive fine-tuning that often degrades learned features (catastrophic forgetting), our analytical Bernoulli KL anchor ($\beta_{\text{KL}}=0.04$) and foreground-guided teacher distillation ($\mathcal{L}_{\text{FG-Distill}}$) simultaneously improve downstream classification. Our full model (\texttt{RoPE+Sparse+Dr.GRPO}) achieves the highest classification performance across all four variants: \textbf{72.05\%} $k$-NN Top-1 (+0.92\% over Vanilla), \textbf{97.12\%} $k$-NN Top-5, and \textbf{80.67\%} 30-epoch Linear Probe accuracy (+2.60\% over Vanilla).
+    \item \textbf{Fast, Monotonic Policy Convergence (Table \ref{tab:grpo_dynamics}):} Across the 10 optimization epochs on ImageNet-100, the mean group reward rises monotonically from $0.6613 \to 0.7443$ (\texttt{def\_grpo}) and $0.6045 \to 0.6826$ (\texttt{rop\_grpo}), while the KL divergence stabilizes cleanly around $0.21\text{--}0.26$, confirming stable policy improvement without policy collapse.
+    \item \textbf{Visual Verification (Figure \ref{fig:ablation_2x2_grid}):} The 5-column visual grid confirms that while standard self-distillation variants exhibit peripheral attention halos in complex scenes, Dr.\ GRPO variants cleanly segment the full body of the airplane, horse, dog, and ship with near-zero background activation.
 \end{itemize}
 
 % =============================================================================
@@ -952,8 +952,8 @@ We examined four modes for frequency coordinate adaptation:
 \subsection{Sparsity Factor vs. Representation Expressiveness}
 Restricting attention to a $3 \times 3$ local window and $K_{\text{semantic}} = 16$ tokens reduces the active key set per spatial query to $9 + 16 + 1 = 26$ tokens out of 197 total tokens (an 86.8\% reduction in active attention pairs). The fact that this configuration outperforms dense attention (+2.52\% in Linear Probing) demonstrates that dense visual attention contains substantial redundancy, and that inductive spatial-semantic filtering acts as an effective regularizer against background overfitting.
 
-\subsection{Design Choices in Stage-2 Dr.\ GRPO}
-Our Stage-2 post-training design incorporates three critical mechanisms that prevent trivial mask degeneration: (1) \textbf{Unbiased Dr.\ GRPO Advantage:} Omitting group standard-deviation normalization prevents gradient explosions when all $G=8$ sampled masks on a high-confidence image yield similar rewards; (2) \textbf{Shared-Prefix Partial Unfreezing:} Freezing the first 10 ViT blocks preserves low- and mid-level visual primitives learned over 190 epochs on ImageNet-100 while reducing trainable parameters to 8.27\%; and (3) \textbf{Verifiable Tri-Objective Reward:} Combining horizontal-flip equivariance ($w_{\text{eq}}=0.45$), spectral TokenCut compactness ($w_{\text{comp}}=0.35$), and target sparsity ($w_{\text{spar}}=0.20$) ensures that the policy cannot game the reward by predicting either a single salient patch or the entire image grid.
+\subsection{Design Choices in Verifiable Dr.\ GRPO Optimization}
+Our Dr.\ GRPO optimization design incorporates three critical mechanisms that prevent trivial mask degeneration: (1) \textbf{Unbiased Dr.\ GRPO Advantage:} Omitting group standard-deviation normalization prevents gradient explosions when all $G=8$ sampled masks on a high-confidence image yield similar rewards; (2) \textbf{Shared-Prefix Partial Unfreezing:} Freezing the first 10 ViT blocks preserves low- and mid-level visual primitives learned on ImageNet-100 while reducing trainable parameters to 8.27\%; and (3) \textbf{Verifiable Tri-Objective Reward:} Combining horizontal-flip equivariance ($w_{\text{eq}}=0.45$), spectral TokenCut compactness ($w_{\text{comp}}=0.35$), and target sparsity ($w_{\text{spar}}=0.20$) ensures that the policy cannot game the reward by predicting either a single salient patch or the entire image grid.
 
 % =============================================================================
 % 7. CONCLUSION
@@ -961,9 +961,9 @@ Our Stage-2 post-training design incorporates three critical mechanisms that pre
 \section{Conclusion}
 \label{sec:conclusion}
 
-In this paper, we presented a two-stage self-supervised Vision Transformer framework for DINOv1 that unifies \textbf{Frequency-Adaptive 2D Rotary Position Embeddings (2D RoPE)} and \textbf{Spatial-Semantic Sparse Attention} in Stage-1 pretraining with \textbf{Unbiased Group Relative Policy Optimization (Dr.\ GRPO)} in Stage-2 post-training. In Stage 1, decoupling spatial frequencies and filtering dense attention into local, semantic, and bidirectional \texttt{[CLS]} pathways yields consistent improvements on CIFAR-10 (\textbf{75.97\%} $k$-NN at $k=10$, \textbf{75.31\%} at $k=20$, and \textbf{83.98\%} standardized Linear Probing Top-1 accuracy, +2.52\% over the baseline) with zero parameter overhead (21.67M backbone parameters) and exact theoretical FLOP parity (9.20 GFLOPs). In Stage 2, formulating foreground patch gating as a label-free RLVR problem with verifiable geometric equivariance and TokenCut spectral rewards dramatically enhances unsupervised object localization—boosting Foreground Mask IoU by \textbf{+16.99\% to +20.10\%} and achieving \textbf{98.17\%--99.91\%} \texttt{CorLoc} across our $2\times 2$ CIFAR-10 ablation study while simultaneously improving downstream classification.
+In this paper, we presented a unified self-supervised Vision Transformer framework for DINOv1 that integrates \textbf{Frequency-Adaptive 2D Rotary Position Embeddings (2D RoPE)}, \textbf{Spatial-Semantic Sparse Softmax Attention}, and \textbf{Unbiased Group Relative Policy Optimization (Dr.\ GRPO)}. Decoupling spatial frequencies across coordinate spectra and filtering dense attention into local, semantic, and bidirectional \texttt{[CLS]} pathways yields consistent improvements on CIFAR-10 (\textbf{75.97\%} $k$-NN at $k=10$, \textbf{75.31\%} at $k=20$, and \textbf{83.98\%} standardized Linear Probing Top-1 accuracy, +2.52\% over the baseline) with zero parameter overhead (21.67M backbone parameters) and exact theoretical FLOP parity (9.20 GFLOPs). Furthermore, formulating foreground patch gating as a label-free RLVR problem with verifiable geometric equivariance and TokenCut spectral rewards dramatically enhances unsupervised object localization—boosting Foreground Mask IoU by \textbf{+16.99\% to +20.10\%} and achieving \textbf{98.17\%--99.91\%} \texttt{CorLoc} across our $2\times 2$ CIFAR-10 ablation study while simultaneously improving downstream classification.
 
-Future work will investigate scaling this two-stage framework to full ImageNet-1K / ImageNet-22K pretraining, integrating register tokens \cite{darcet2024vision}, implementing specialized Triton sparse kernels to recover wall-clock throughput parity, and extending Stage-2 verifiable visual rewards to dense multi-object segmentation and video tracking benchmarks.
+Future work will investigate scaling this framework to full ImageNet-1K / ImageNet-22K representation learning, integrating register tokens \cite{darcet2024vision}, implementing specialized Triton sparse kernels to recover wall-clock throughput parity, and extending verifiable visual rewards to dense multi-object segmentation and video tracking benchmarks.
 
 % =============================================================================
 % REFERENCES (EMBEDDED FOR SELF-CONTAINED COMPILATION)

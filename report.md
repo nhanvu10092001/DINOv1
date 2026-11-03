@@ -97,10 +97,10 @@ Theo quy chuẩn bài báo DINO gốc (Caron et al., 2021, Section 3.2 và Table
 
 ---
 
-## 5. Giai Đoạn 2 (Stage-2): Hậu Huấn Luyện Tự Giám Sát với Dr. GRPO & Nghiên Cứu Ablation 2×2
+## 5. Tối Ưu Hóa Chính Sách Tự Giám Sát với Dr. GRPO & Nghiên Cứu Ablation 2×2
 
-Để triệt tiêu hoàn toàn nhiễu hậu cảnh còn sót lại sau Stage-1 mà **không sử dụng bất kỳ nhãn lớp hay mạng phần thưởng (neural reward model) nào**, hệ thống triển khai giai đoạn hậu huấn luyện tăng cường với phần thưởng khả kiểm chứng (**RLVR — Dr. GRPO**) thông qua `models/grpo_policy_wrapper.py` (`DINOGRPOPolicyWrapper`) và `losses/dr_grpo_loss.py` (`DrGRPOLoss`):
-- **Shared-Prefix Policy Wrapper**: Đóng băng 10 tầng Transformer đầu (`blocks[0..9]`), chỉ mở khóa 2 tầng cuối (`blocks[10..11]`), `LayerNorm` và cổng phân đoạn nhẹ `policy_gate` ($384 \to 96 \to 1$), chỉ huấn luyện **3,587,521 / 43,369,153 tham số (8.27%)** và giữ nguyên một bản sao `ref_model` đóng băng từ checkpoint Epoch 190.
+Để triệt tiêu nhiễu hậu cảnh trên bản đồ chú ý mà **không sử dụng bất kỳ nhãn lớp hay mạng phần thưởng (neural reward model) nào**, phương pháp tích hợp cơ chế tối ưu hóa chính sách tương đối theo nhóm khả kiểm chứng (**RLVR — Dr. GRPO**) thông qua `models/grpo_policy_wrapper.py` (`DINOGRPOPolicyWrapper`) và `losses/dr_grpo_loss.py` (`DrGRPOLoss`):
+- **Shared-Prefix Policy Wrapper**: Đóng băng 10 tầng Transformer đầu (`blocks[0..9]`), chỉ mở khóa 2 tầng cuối (`blocks[10..11]`), `LayerNorm` và cổng phân đoạn nhẹ `policy_gate` ($384 \to 96 \to 1$), chỉ huấn luyện **3,587,521 / 43,369,153 tham số (8.27%)** và giữ nguyên một bản sao tham chiếu `ref_model` đóng băng.
 - **Phần thưởng tự giám sát khả kiểm chứng (`self_supervised_v1`)**: Lấy mẫu nhóm $G=8$ mặt nạ nhị phân $\mathbf{a}^{(g)} \in \{0, 1\}^{196}$ cho mỗi ảnh và tối ưu hóa tổng trọng số của:
   1. *Geometric Equivariance IoU* ($w_{\text{eq}} = 0.45$): Độ nhất quán bất biến qua phép lật ngang $T^{-1}(\pi_\theta(T(I)))$ kết hợp mặt nạ nổi bật phổ-cạnh.
   2. *TokenCut Spectral & 2D Spatial Compactness* ($w_{\text{comp}} = 0.35$): Độ gắn kết phổ cosine nội vùng tiền cảnh trừ đi lát cắt tiền cảnh–hậu cảnh và biến thiên không gian 2D (Total Variation).
@@ -109,12 +109,12 @@ Theo quy chuẩn bài báo DINO gốc (Caron et al., 2021, Section 3.2 và Table
 
 ### Bảng 2×2 Ablation Study trên toàn bộ tập CIFAR-10 (50,000 train / 10,000 test):
 
-| Biến thể Mô hình | Kiến trúc Backbone | Stage-2 RLVR | k-NN Top-1 (%) | k-NN Top-5 (%) | Linear Probe Top-1 (%) | Foreground IoU (%) | CorLoc (%) |
+| Biến thể Mô hình | Kiến trúc Backbone | Dr. GRPO Policy | k-NN Top-1 (%) | k-NN Top-5 (%) | Linear Probe Top-1 (%) | Foreground IoU (%) | CorLoc (%) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | 1. Vanilla DINOv1 | `vit_small` | No | 71.13% | 96.57% | 78.07% | 58.88% | 79.93% |
 | 2. RoPE+Sparse DINOv1 | `vit_small_sparse_rope` | No | 71.83% | 96.98% | 80.22% | 55.45% | 69.26% |
-| 3. Vanilla + Dr. GRPO | `vit_small` | Dr. GRPO | 71.29% | 96.73% | 78.44% | **78.98%** | **99.91%** |
-| **4. RoPE+Sparse + Dr. GRPO (Ours)** | `vit_small_sparse_rope` | **Dr. GRPO** | **72.05%** | **97.12%** | **80.67%** | **72.44%** | **98.17%** |
+| 3. Vanilla + Dr. GRPO | `vit_small` | Yes | 71.29% | 96.73% | 78.44% | **78.98%** | **99.91%** |
+| **4. RoPE+Sparse + Dr. GRPO (Ours)** | `vit_small_sparse_rope` | **Yes** | **72.05%** | **97.12%** | **80.67%** | **72.44%** | **98.17%** |
 
 - **Mức tăng của Dr. GRPO trên Vanilla DINOv1**: `+0.16%` k-NN Top-1, `+0.37%` Linear Probe, **`+20.10%` Foreground Mask IoU** ($58.88\% \to 78.98\%$), **`+19.98%` CorLoc** ($79.93\% \to 99.91\%$).
 - **Mức tăng của Dr. GRPO trên RoPE+Sparse DINOv1**: `+0.22%` k-NN Top-1, `+0.45%` Linear Probe, **`+16.99%` Foreground Mask IoU** ($55.45\% \to 72.44\%$), **`+28.91%` CorLoc** ($69.26\% \to 98.17\%$).
@@ -169,9 +169,9 @@ python eval/eval_linear.py \
     --cache_features
 ```
 
-### 3. Hậu huấn luyện Stage-2 Dr. GRPO và Đánh giá 2×2 Ablation
+### 3. Tối ưu hóa Dr. GRPO và Đánh giá 2×2 Ablation
 ```bash
-# Chạy Stage-2 Self-Supervised Dr. GRPO Post-Training cho cả 2 biến thể
+# Chạy Self-Supervised Dr. GRPO Optimization cho cả 2 biến thể
 python train_grpo_post.py \
     --train_data_path data/train \
     --eval_data_path data/cifar10 \
@@ -205,8 +205,8 @@ python eval/visualize_attention.py \
 
 ## 7. Kết Luận
 
-1. **Hiệu quả kiến trúc (Stage-1)**: Việc tích hợp **Frequency-Adaptive 2D RoPE** kết hợp **Spatial-Semantic Sparse Attention** cải thiện chất lượng tự học biểu diễn không giám sát của DINOv1 (sau 190 epochs pretrain trên ImageNet-100 bằng NVIDIA H100) trên mọi thước đo đánh giá CIFAR-10:
+1. **Hiệu quả kiến trúc RoPE + Sparse Attention**: Việc tích hợp **Frequency-Adaptive 2D RoPE** kết hợp **Spatial-Semantic Sparse Attention** cải thiện chất lượng tự học biểu diễn không giám sát của DINOv1 (huấn luyện 190 epochs trên ImageNet-100 bằng NVIDIA H100) trên mọi thước đo đánh giá CIFAR-10:
    - Tăng **+1.56% k-NN ($k=10$) Top-1 Accuracy** ($74.41\% \rightarrow 75.97\%$) và **+0.97% k-NN ($k=20$) Top-1 Accuracy** ($74.34\% \rightarrow 75.31\%$).
    - Tăng **+2.52% Linear Probe (Best Checkpoint) Top-1 Accuracy** ($81.46\% \rightarrow 83.98\%$).
-2. **Hiệu quả hậu huấn luyện tự giám sát Dr. GRPO (Stage-2)**: Chỉ với 10 epochs RLVR không nhãn trên 8.27% tham số mở khóa, **Dr. GRPO** nâng **Foreground Mask IoU** thêm **+16.99% đến +20.10%** (đạt **CorLoc 98.17%–99.91%**), đồng thời tiếp tục cải thiện độ chính xác phân loại $k$-NN và Linear Probe trên toàn bộ tập CIFAR-10.
+2. **Hiệu quả tối ưu hóa chính sách tự giám sát Dr. GRPO**: Chỉ với 10 epochs RLVR không nhãn trên 8.27% tham số mở khóa, **Dr. GRPO** nâng **Foreground Mask IoU** thêm **+16.99% đến +20.10%** (đạt **CorLoc 98.17%–99.91%**), đồng thời tiếp tục cải thiện độ chính xác phân loại $k$-NN và Linear Probe trên toàn bộ tập CIFAR-10.
 3. **Chi phí tài nguyên**: Mô hình giữ nguyên 100% dung lượng tham số backbone (21.67M params) và độ phức tạp lý thuyết (9.20 GFLOPs), chứng minh hiệu quả thuần túy đến từ việc mô hình hóa hình học không gian 2D và tối ưu hóa chính sách chú ý tự giám sát.

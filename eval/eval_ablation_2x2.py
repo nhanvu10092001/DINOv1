@@ -410,7 +410,7 @@ def generate_attention_comparison_grid(
             ax.axis("off")
 
     plt.suptitle(
-        "2x2 Ablation Study: Last-Layer [CLS] Self-Attention Maps (Epoch 190 + Stage-2 Dr. GRPO)",
+        "2x2 Ablation Study: Last-Layer [CLS] Self-Attention Maps (DINOv1 + Dr. GRPO)",
         fontsize=13,
         fontweight="bold",
         y=0.995,
@@ -442,7 +442,7 @@ def export_ablation_tables(
     fieldnames = [
         "Model Variant",
         "Architecture",
-        "Stage-2 RLVR",
+        "Dr. GRPO Policy",
         "k-NN Top-1 (%)",
         "k-NN Top-5 (%)",
         "Linear Probe Top-1 (%)",
@@ -456,7 +456,7 @@ def export_ablation_tables(
             writer.writerow({
                 "Model Variant": row["name"],
                 "Architecture": row["arch"],
-                "Stage-2 RLVR": row["rlvr"],
+                "Dr. GRPO Policy": row["rlvr"],
                 "k-NN Top-1 (%)": f"{row['knn_top1']:.2f}",
                 "k-NN Top-5 (%)": f"{row['knn_top5']:.2f}",
                 "Linear Probe Top-1 (%)": f"{row['linear_top1']:.2f}",
@@ -466,9 +466,9 @@ def export_ablation_tables(
 
     # 2. Export Markdown for 7-Minute Defense Presentation
     md_lines = [
-        "# 2x2 Ablation Study Results: Architecture (RoPE + Sparse) x Post-Training (Dr. GRPO)",
+        "# 2x2 Ablation Study Results: Architecture (RoPE + Sparse) x Verifiable Policy Optimization (Dr. GRPO)",
         "",
-        "| Model Variant | Backbone Architecture | Stage-2 RLVR | k-NN Top-1 (%) | k-NN Top-5 (%) | Linear Probe Top-1 (%) | Foreground IoU (%) | CorLoc (%) |",
+        "| Model Variant | Backbone Architecture | Dr. GRPO Policy | k-NN Top-1 (%) | k-NN Top-5 (%) | Linear Probe Top-1 (%) | Foreground IoU (%) | CorLoc (%) |",
         "| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |",
     ]
     for row in results:
