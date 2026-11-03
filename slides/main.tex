@@ -1,7 +1,7 @@
 \documentclass[aspectratio=169,10pt]{beamer}
 
 % ==============================================================================
-% THEME & MODERN CLEAN PALETTE
+% THEME & MODERN ACADEMIC PALETTE
 % ==============================================================================
 \usetheme{Madrid}
 \usecolortheme{whale}
@@ -13,12 +13,11 @@
 \definecolor{accentblue}{RGB}{24,76,152}
 \definecolor{darkgreen}{RGB}{12,112,48}
 \definecolor{crimsonred}{RGB}{165,24,24}
-\definecolor{amberorange}{RGB}{210,105,12}
-\definecolor{softblue}{RGB}{240,246,255}
-\definecolor{softgreen}{RGB}{238,252,242}
-\definecolor{softorange}{RGB}{255,248,236}
-\definecolor{softred}{RGB}{255,240,240}
-\definecolor{softpurple}{RGB}{245,240,255}
+\definecolor{softblue}{RGB}{242,247,255}
+\definecolor{softgreen}{RGB}{240,252,244}
+\definecolor{softorange}{RGB}{255,246,234}
+\definecolor{softred}{RGB}{255,242,242}
+\definecolor{softpurple}{RGB}{246,242,255}
 \definecolor{cardgray}{RGB}{248,250,252}
 \definecolor{borderblue}{RGB}{35,85,160}
 \definecolor{bordergreen}{RGB}{25,125,55}
@@ -39,7 +38,7 @@
 \setbeamercolor{block title alerted}{bg=crimsonred,fg=white}
 \setbeamercolor{block body alerted}{bg=softred,fg=black}
 
-% Clean Margins & Templates
+% Margins & Clean Layout
 \setbeamersize{text margin left=8mm, text margin right=8mm}
 \setbeamertemplate{navigation symbols}{}
 \setbeamertemplate{headline}{}
@@ -48,11 +47,11 @@
 \setbeamertemplate{footline}{
     \leavevmode%
     \hbox{%
-    \begin{beamercolorbox}[wd=.45\paperwidth,ht=2.4ex,dp=0.8ex,left]{palette primary}%
+    \begin{beamercolorbox}[wd=.50\paperwidth,ht=2.4ex,dp=0.8ex,left]{palette primary}%
         \hspace*{3ex}\textbf{Part 2: Custom Backbone Architecture (RoPE + Sparse Attention)}
     \end{beamercolorbox}%
-    \begin{beamercolorbox}[wd=.35\paperwidth,ht=2.4ex,dp=0.8ex,center]{palette secondary}%
-        Frequency-Adaptive 2D RoPE \& Spatial-Semantic Attention
+    \begin{beamercolorbox}[wd=.30\paperwidth,ht=2.4ex,dp=0.8ex,center]{palette secondary}%
+        ViT-Small/16 Enhancement
     \end{beamercolorbox}%
     \begin{beamercolorbox}[wd=.20\paperwidth,ht=2.4ex,dp=0.8ex,right]{palette primary}%
         Slide \insertframenumber{} / 5\hspace*{3ex}
@@ -64,8 +63,8 @@
 % PACKAGES
 % ==============================================================================
 \usepackage[utf8]{inputenc}
-\usepackage[T5]{fontenc}
-\usepackage[vietnamese]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
 \usepackage{amsmath,amssymb,amsfonts,mathtools,bm}
 \usepackage{graphicx}
 \usepackage{booktabs}
@@ -82,46 +81,46 @@
 % ==============================================================================
 % SLIDE 1: MOTIVATION & PROBLEM STATEMENT
 % ==============================================================================
-\begin{frame}{1. Động Lực Cải Tiến Kiến Trúc (Motivation)}
-\vspace{-0.2em}
-Trong mô hình DINOv1 gốc (\texttt{ViT-Small/16}), hai thành phần cốt lõi gặp phải hạn chế lớn:
+\begin{frame}{1. Motivation: Bottlenecks in Vanilla ViT (DINOv1)}
+\vspace{-0.4em}
+In the standard DINOv1 baseline (\texttt{ViT-Small/16}), two core components introduce major bottlenecks:
 
-\vspace{0.4em}
+\vspace{0.2em}
 \begin{columns}[t]
     % Problem 1: APE Limitation
-    \begin{column}{0.48\textwidth}
-        \begin{alertblock}{\textbf{Hạn chế 1: Mã hóa Vị trí Tuyệt đối (APE)}}
+    \begin{column}{0.49\textwidth}
+        \begin{alertblock}{\textbf{Bottleneck 1: Absolute Position Embeddings}}
             \small
-            \begin{itemize}\setlength{\itemsep}{6pt}
-                \item \textbf{Méo hình học khi Multi-Crop}: DINO huấn luyện đồng thời ảnh $224\times 224$ (196 patch) và $96\times 96$ (36 patch). Bảng APE buộc phải nội suy bicubic $\Rightarrow$ gây sai lệch tương quan khoảng cách.
-                \item \textbf{Thiếu tính bất biến tịnh tiến}: Không mô hình hóa trực tiếp khoảng cách tương đối giữa hai patch $(\Delta x, \Delta y)$.
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Multi-Crop Distortion}: DINO jointly trains on $224^2$ (196 patches) and $96^2$ (36 patches). Bicubic interpolation alters distance metrics and distorts patch aspect ratios.
+                \item \textbf{No Translation Invariance}: Fails to directly model continuous relative displacements $(\Delta x, \Delta y)$.
             \end{itemize}
         \end{alertblock}
     \end{column}
 
     % Problem 2: Full Attention Limitation
-    \begin{column}{0.48\textwidth}
-        \begin{alertblock}{\textbf{Hạn chế 2: Full Dense Attention $\mathcal{O}(N^2)$}}
+    \begin{column}{0.49\textwidth}
+        \begin{alertblock}{\textbf{Bottleneck 2: Full Dense Attention $\mathcal{O}(N^2)$}}
             \small
-            \begin{itemize}\setlength{\itemsep}{6pt}
-                \item \textbf{Lãng phí tính toán nghiêm trọng}: Mọi token đều tương tác với toàn bộ $197$ token, trong khi $>85\%$ trọng số sau hội tụ xấp xỉ bằng $0$.
-                \item \textbf{Nhiễu nền (Background Clutter)}: Cơ chế Dense Attention khiến token \texttt{[CLS]} dễ bị phân tán vào nền trời, cỏ và bối cảnh xung quanh thay vì tập trung vào vật thể chính.
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Computational Redundancy}: Every token attends to all $197$ tokens, yet $>85\%$ of converged attention weights are near zero.
+                \item \textbf{Background Clutter}: Dense attention diffuses mass into irrelevant background (sky, grass) rather than salient objects.
             \end{itemize}
         \end{alertblock}
     \end{column}
 \end{columns}
 
-\vspace{0.6em}
-\begin{exampleblock}{\textbf{Mục tiêu Đề xuất}}
+\vspace{0.3em}
+\begin{exampleblock}{\textbf{Our Architectural Remedy}}
     \centering\small
-    Thay thế APE bằng \textbf{Frequency-Adaptive 2D RoPE} \& thay thế Dense Attention bằng \textbf{Spatial-Semantic Sparse Attention}.
+    Replace static APE with \textbf{Frequency-Adaptive 2D RoPE} \& dense attention with \textbf{Spatial-Semantic Sparse Attention}.
 \end{exampleblock}
 \end{frame}
 
 % ==============================================================================
 % SLIDE 2: OVERVIEW OF THE 2 ARCHITECTURAL ENHANCEMENTS
 % ==============================================================================
-\begin{frame}{2. Tổng Quan Kiến Trúc Đề Xuất (Architecture Overview)}
+\begin{frame}{2. Architectural Overview: Baseline vs. Proposed ViT Block}
 \vspace{-0.3em}
 \begin{columns}[c]
     % Left Column: TikZ Comparison Diagram
@@ -143,10 +142,10 @@ Trong mô hình DINOv1 gốc (\texttt{ViT-Small/16}), hai thành phần cốt l�
             \begin{scope}[local bounding box=colBase]
                 \node[font=\bfseries\small, text=crimsonred] (tb) at (0, 0) {Baseline DINO ViT Block};
                 \node[graybox, text width=3.9cm, below=0.25cm of tb] (b1) {Patch Embedding ($16\times 16$)};
-                \node[redbox, text width=3.9cm, below=0.28cm of b1] (b2) {\textbf{+ Learnable APE Table}\\ \scriptsize Bị méo khi nội suy $96\times 96$};
-                \node[graybox, text width=3.9cm, below=0.28cm of b2] (b3) {LayerNorm + Q,K,V Projection};
-                \node[redbox, text width=3.9cm, below=0.28cm of b3] (b4) {\textbf{Full Dense Attention}\\ \scriptsize $197\times 197$ ma trận đầy đủ};
-                \node[graybox, text width=3.9cm, below=0.28cm of b4] (b5) {LayerNorm + MLP ($384\to 1536$)};
+                \node[redbox, text width=3.9cm, below=0.26cm of b1] (b2) {\textbf{+ Learnable APE Table}\\ \scriptsize Warped during $96\times 96$ interpolation};
+                \node[graybox, text width=3.9cm, below=0.26cm of b2] (b3) {LayerNorm + Q,K,V Projection};
+                \node[redbox, text width=3.9cm, below=0.26cm of b3] (b4) {\textbf{Full Dense Attention}\\ \scriptsize $197\times 197$ dense matrix};
+                \node[graybox, text width=3.9cm, below=0.26cm of b4] (b5) {LayerNorm + MLP ($384\to 1536$)};
                 \draw[arrow] (b1) -- (b2);
                 \draw[arrow] (b2) -- (b3);
                 \draw[arrow] (b3) -- (b4);
@@ -156,11 +155,11 @@ Trong mô hình DINOv1 gốc (\texttt{ViT-Small/16}), hai thành phần cốt l�
             % Proposed Block
             \begin{scope}[local bounding box=colProp, xshift=5.4cm]
                 \node[font=\bfseries\small, text=darkgreen] (tp) at (0, 0) {Proposed ViT Block (Ours)};
-                \node[graybox, text width=4.3cm, below=0.25cm of tp] (p1) {Patch Embedding ($16\times 16$)\\ \scriptsize \textcolor{darkgreen}{\textbf{Loại bỏ bảng APE không gian}}};
-                \node[graybox, text width=4.3cm, below=0.28cm of p1] (p2) {LayerNorm + Q,K,V Projection};
-                \node[orangebox, text width=4.3cm, below=0.28cm of p2] (p3) {\textbf{Component 1: 2D RoPE}\\ \scriptsize Xoay trực tiếp vector $Q, K$\\ \scriptsize Token \texttt{[CLS]} giữ nguyên ($\mathbf{R}=\mathbf{I}$)};
-                \node[greenbox, text width=4.3cm, below=0.28cm of p3] (p4) {\textbf{Component 2: Sparse Attention}\\ \scriptsize Cục bộ $3\times 3$ + Top-$16$ + \texttt{[CLS]}\\ \scriptsize \textbf{26 active keys} ($-86.8\%$ tính toán)};
-                \node[graybox, text width=4.3cm, below=0.28cm of p4] (p5) {LayerNorm + MLP ($384\to 1536$)};
+                \node[graybox, text width=4.3cm, below=0.25cm of tp] (p1) {Patch Embedding ($16\times 16$)\\ \scriptsize \textcolor{darkgreen}{\textbf{Spatial APE table eliminated}}};
+                \node[graybox, text width=4.3cm, below=0.26cm of p1] (p2) {LayerNorm + Q,K,V Projection};
+                \node[orangebox, text width=4.3cm, below=0.26cm of p2] (p3) {\textbf{Component 1: 2D RoPE}\\ \scriptsize Direct rotation on $Q, K$ vectors\\ \scriptsize Token \texttt{[CLS]} unrotated ($\mathbf{R}=\mathbf{I}$)};
+                \node[greenbox, text width=4.3cm, below=0.26cm of p3] (p4) {\textbf{Component 2: Sparse Attention}\\ \scriptsize Local $3\times 3$ + Top-$16$ + \texttt{[CLS]}\\ \scriptsize \textbf{26 active keys} ($-86.8\%$ computation)};
+                \node[graybox, text width=4.3cm, below=0.26cm of p4] (p5) {LayerNorm + MLP ($384\to 1536$)};
                 \draw[arrow] (p1) -- (p2);
                 \draw[arrow] (p2) -- (p3);
                 \draw[arrow] (p3) -- (p4);
@@ -177,15 +176,15 @@ Trong mô hình DINOv1 gốc (\texttt{ViT-Small/16}), hai thành phần cốt l�
 
     % Right Column: High-Level Highlights
     \begin{column}{0.40\textwidth}
-        \begin{block}{\textbf{Nguyên Lý Cốt Lõi}}
+        \begin{block}{\textbf{Core Design Principles}}
             \small
             \begin{itemize}\setlength{\itemsep}{5pt}
-                \item \textbf{Giữ nguyên 100\% tham số}:\\
-                Backbone đạt đúng \textbf{21,665,664} tham số (bằng tuyệt đối với mô hình gốc).
-                \item \textbf{Bảo toàn FLOPs lý thuyết}:\\
-                \textbf{9.20 GFLOPs} tại độ phân giải $224\times 224$.
-                \item \textbf{Tính toán cục bộ \& toàn cục}:\\
-                2D RoPE nhúng tọa độ liên tục; Sparse Attention gom đúng 26 khóa nổi bật ngữ nghĩa.
+                \item \textbf{Strict Zero-Parameter Overhead}:\\
+                Maintains exactly \textbf{21,665,664} parameters (100\% match with baseline).
+                \item \textbf{Theoretical FLOPs Parity}:\\
+                \textbf{9.20 GFLOPs} at standard $224\times 224$ input resolution.
+                \item \textbf{Geometric \& Saliency Synergy}:\\
+                2D RoPE provides continuous spatial awareness; Sparse Attention isolates the 26 most informative keys.
             \end{itemize}
         \end{block}
     \end{column}
@@ -196,44 +195,42 @@ Trong mô hình DINOv1 gốc (\texttt{ViT-Small/16}), hai thành phần cốt l�
 % SLIDE 3: COMPONENT 1 — FREQUENCY-ADAPTIVE 2D RoPE
 % ==============================================================================
 \begin{frame}{3. Component 1: Frequency-Adaptive 2D Rotary Position Embedding}
-\vspace{-0.2em}
+\vspace{-0.3em}
 \begin{columns}[t]
     % Column 1: Formulation & Relative Property
-    \begin{column}{0.48\textwidth}
-        \begin{block}{\textbf{Cơ Chế Xoay Vector 2D Không Gian}}
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{2D Spatial Rotary Mechanism}}
             \small
-            Phân chia chiều không gian head $d_h = 64$ thành 2 trục $x, y$:
-            \vspace{-0.2em}
-            \[ d_x = d_y = 32, \quad M = 16 \text{ dải tần số } \omega_m \]
-            Vector $Q$ và $K$ được xoay qua ma trận trực giao $\mathbf{R}_{\Theta}$:
-            \vspace{-0.2em}
+            Decompose head dimension $d_h = 64$ into spatial $x, y$ axes:
+            \vspace{-0.3em}
+            \[ d_x = d_y = 32, \quad M = 16 \text{ frequency bands } \omega_m \]
+            \vspace{-0.3em}
+            Query and key vectors rotated by orthogonal matrix $\mathbf{R}_{\Theta}$:
+            \vspace{-0.3em}
             \[ \tilde{\mathbf{q}}_i = \mathbf{R}_{\Theta}(p_{x,i}, p_{y,i}) \mathbf{q}_i, \quad \tilde{\mathbf{k}}_j = \mathbf{R}_{\Theta}(p_{x,j}, p_{y,j}) \mathbf{k}_j \]
-            \textbf{Bất biến tịnh tiến tương đối qua tích vô hướng}:
-            \vspace{-0.2em}
+            \vspace{-0.3em}
+            \textbf{Relative translation invariance via inner product}:
+            \vspace{-0.3em}
             \[ \langle \tilde{\mathbf{q}}_i, \tilde{\mathbf{k}}_j \rangle = \mathbf{q}_i^T \mathbf{R}_{\Theta}(p_{x,i}-p_{x,j}, \, p_{y,i}-p_{y,j}) \mathbf{k}_j \]
-            $\Rightarrow$ Tự động mã hóa khoảng cách hình học tương đối!
+            \vspace{-0.3em}
+            $\Rightarrow$ Directly encodes continuous 2D relative displacement!
         \end{block}
     \end{column}
 
     % Column 2: Coordinate Blending & CLS
-    \begin{column}{0.48\textwidth}
-        \begin{exampleblock}{\textbf{Lịch Phối Trộn Tọa Độ Thích Ứng Tần Số}}
+    \begin{column}{0.49\textwidth}
+        \begin{exampleblock}{\textbf{Frequency-Adaptive Coordinate Blending}}
             \small
-            Trộn tọa độ nguyên tuyệt đối và chuẩn hóa:
-            \vspace{-0.2em}
+            Blends raw integer and normalized continuous coordinates:
+            \vspace{-0.3em}
             \[ p_m = \alpha_m \cdot p_{\text{raw}} + (1 - \alpha_m) \cdot p_{\text{norm}}, \quad \alpha_m = 1 - \frac{m}{M-1} \]
-            \begin{itemize}\setlength{\itemsep}{3pt}
-                \item \textbf{Tần số cao ($\alpha \to 1$)}: Tọa độ nguyên $\Rightarrow$ nắm bắt chi tiết texture và ranh giới sắc nét.
-                \item \textbf{Tần số thấp ($\alpha \to 0$)}: Tọa độ chuẩn hóa $\Rightarrow$ bất biến tỷ lệ xuyên qua các crop $224^2$ và $96^2$.
+            \vspace{-0.3em}
+            \begin{itemize}\setlength{\itemsep}{1.5pt}
+                \item \textbf{High Frequencies ($\alpha \to 1$)}: Raw integer grid $\Rightarrow$ captures sharp local edge structures.
+                \item \textbf{Low Frequencies ($\alpha \to 0$)}: Normalized grid $\Rightarrow$ guarantees scale invariance across $224^2$ and $96^2$ crops.
             \end{itemize}
+            \textbf{Preserving \texttt{[CLS]} Token}: Set $\boldsymbol{\theta}_{\text{cls}} = \mathbf{0} \Rightarrow \mathbf{R} = \mathbf{I}$, preventing artificial spatial bias on the global representation.
         \end{exampleblock}
-
-        \vspace{0.2em}
-        \begin{alertblock}{\textbf{Bảo Toàn Token \texttt{[CLS]}}}
-            \small
-            \texttt{[CLS]} không có tọa độ không gian: gán $\boldsymbol{\theta}_{\text{cls}} = \mathbf{0} \Rightarrow \mathbf{R} = \mathbf{I}$.\\
-            $\Rightarrow$ Tránh gây thiên kiến không gian giả tạo cho nhãn toàn cục.
-        \end{alertblock}
     \end{column}
 \end{columns}
 \end{frame}
@@ -242,25 +239,25 @@ Trong mô hình DINOv1 gốc (\texttt{ViT-Small/16}), hai thành phần cốt l�
 % SLIDE 4: COMPONENT 2 — SPATIAL-SEMANTIC SPARSE ATTENTION
 % ==============================================================================
 \begin{frame}{4. Component 2: Spatial-Semantic Sparse Softmax Attention}
-\vspace{-0.3em}
+\vspace{-0.2em}
 \begin{columns}[c]
     % Column 1: TikZ Visual Grid Support
     \begin{column}{0.48\textwidth}
         \centering
-        \resizebox{0.92\textwidth}{!}{%
+        \resizebox{0.90\textwidth}{!}{%
         \begin{tikzpicture}[
             font=\sffamily\footnotesize,
             box/.style={draw=black!70, rounded corners=3pt, align=center, inner sep=4pt}
         ]
             % CLS Token node
             \node[box, fill=softpurple, draw=borderpurple, text width=5.2cm] (cls) {
-                \textbf{Cầu Nối Hai Chiều \texttt{[CLS]} (Index 0)}\\
-                \scriptsize \texttt{[CLS]} nhìn mọi token \& mọi token đều nhìn \texttt{[CLS]}
+                \textbf{Bidirectional \texttt{[CLS]} Conduit (Index 0)}\\
+                \scriptsize \texttt{[CLS]} attends to all tokens \& all tokens attend to \texttt{[CLS]}
             };
 
             % 5x5 Grid
             \coordinate (gtop) at ([yshift=-0.35cm]cls.south);
-            \def\cs{0.50}
+            \def\cs{0.48}
             \begin{scope}[shift={($(gtop)+(-2.5*\cs, -5*\cs)$)}]
                 \foreach \r in {0,...,4} {
                     \foreach \c in {0,...,4} {
@@ -290,30 +287,29 @@ Trong mô hình DINOv1 gốc (\texttt{ViT-Small/16}), hai thành phần cốt l�
                     (0*\cs, 1*\cs) rectangle ++(\cs, \cs) node[pos=0.5, font=\scriptsize\bfseries] {Top-$K$};
             \end{scope}
 
-            \draw[<->, line width=1.0pt, draw=borderpurple] (cls.south) -- ++(0, -0.28);
+            \draw[<->, line width=1.0pt, draw=borderpurple] (cls.south) -- ++(0, -0.26);
         \end{tikzpicture}%
         }
     \end{column}
 
     % Column 2: 3 Pathways & Exact Softmax
     \begin{column}{0.50\textwidth}
-        \begin{block}{\textbf{3 Nhánh Hỗ Trợ Hoạt Động $\mathcal{S}_i$}}
+        \begin{block}{\textbf{Active Key Set $\mathcal{S}_i$ (26 Keys Total)}}
             \small
-            Tập khóa hoạt động: $\mathcal{S}_i = \mathcal{N}_{\text{local}}(i) \cup \mathcal{N}_{\text{semantic}}(i) \cup \{0\}$
-            \begin{enumerate}\setlength{\itemsep}{3pt}
-                \item \textcolor{bordergreen}{\textbf{Cục bộ $3\times 3$ ($\mathcal{N}_{\text{local}}$)}}: 9 patch lân cận (Chebyshev $R=1$).
-                \item \textcolor{borderorange}{\textbf{Ngữ nghĩa Top-$K$ ($\mathcal{N}_{\text{semantic}}$)}}: 16 patch có độ tương đồng tích vô hướng cao nhất.
-                \item \textcolor{borderpurple}{\textbf{Cầu nối \texttt{[CLS]}}}: Index $0$ kết nối ngữ cảnh toàn cục.
-            \end{enumerate}
-            $\Rightarrow$ \textbf{Tổng khóa kích hoạt: 26 / 197 keys (Giảm 86.8\% phép tính)}.
+            \begin{itemize}\setlength{\itemsep}{1.5pt}
+                \item \textcolor{bordergreen}{\textbf{Local $3\times 3$ ($\mathcal{N}_{\text{local}}$)}}: 9 spatial neighbors (Chebyshev radius $R=1$).
+                \item \textcolor{borderorange}{\textbf{Semantic Top-$16$ ($\mathcal{N}_{\text{semantic}}$)}}: 16 highest dot-product keys across the grid.
+                \item \textcolor{borderpurple}{\textbf{Bidirectional \texttt{[CLS]}}}: Seamless global-to-local communication.
+            \end{itemize}
+            \centering \textbf{86.8\% Computation Reduction} vs. dense attention ($26 / 197$).
         \end{block}
-
-        \vspace{0.2em}
-        \begin{exampleblock}{\textbf{Chuẩn Hóa Softmax Chính Xác}}
+        \vspace{-0.3em}
+        \begin{exampleblock}{\textbf{Exact Softmax Normalization}}
             \small
-            \vspace{-0.2em}
-            \[ \mathbf{A}_{ij} = \frac{\exp(\tilde{\mathbf{q}}_i^T \tilde{\mathbf{k}}_j / \sqrt{d_h})}{\sum_{l \in \mathcal{S}_i} \exp(\tilde{\mathbf{q}}_i^T \tilde{\mathbf{k}}_l / \sqrt{d_h})} \quad \forall j \in \mathcal{S}_i \]
-            \textbf{Không xấp xỉ}: Trọng số tổng đúng bằng 1, triệt tiêu gradient vanishing và tránh hiện tượng tràn số.
+            \vspace{-0.3em}
+            \[ \mathbf{A}_{ij} = \frac{\exp(\tilde{\mathbf{q}}_i^T \tilde{\mathbf{k}}_j / \sqrt{d_h})}{\sum_{l \in \mathcal{S}_i} \exp(\tilde{\mathbf{q}}_i^T \tilde{\mathbf{k}}_l / \sqrt{d_h})} \quad (j \in \mathcal{S}_i) \]
+            \vspace{-0.3em}
+            \scriptsize \textbf{Exact Formulation}: Probabilities strictly sum to 1 over $\mathcal{S}_i$, ensuring stable gradients.
         \end{exampleblock}
     \end{column}
 \end{columns}
@@ -322,42 +318,42 @@ Trong mô hình DINOv1 gốc (\texttt{ViT-Small/16}), hai thành phần cốt l�
 % ==============================================================================
 % SLIDE 5: VISUAL VERIFICATION & PERFORMANCE GAINS
 % ==============================================================================
-\begin{frame}{5. Minh Chứng Trực Quan: Attention Maps \& Hiệu Năng}
+\begin{frame}{5. Visual Evidence: Attention Maps \& Empirical Gains}
 \vspace{-0.3em}
 \begin{columns}[c]
     % Left Column: Real Attention Map Sample
     \begin{column}{0.54\textwidth}
-        \begin{block}{\textbf{So Sánh Attention Map 6 Heads (Epoch 190)}}
+        \begin{block}{\textbf{6-Head Attention Map Comparison (Epoch 190)}}
             \centering
             \includegraphics[width=\textwidth]{output/attention_comparison.png}
         \end{block}
         \vspace{-0.2em}
-        \begin{exampleblock}{\textbf{Phân Tích Định Tính}}
+        \begin{exampleblock}{\textbf{Qualitative Analysis}}
             \scriptsize
             \begin{itemize}\setlength{\itemsep}{2pt}
-                \item \textbf{Baseline ViT}: Chú ý bị phân tán rộng vào nền trời phía sau.
-                \item \textbf{RoPE + Sparse (Ours)}: Head 2 và Head 5 gom chặt sự chú ý vào đúng khung thân, cánh và đuôi máy bay, tách bạch hoàn toàn khỏi nền.
+                \item \textbf{Baseline ViT}: Attention is diffused across the background sky and ground.
+                \item \textbf{RoPE + Sparse (Ours)}: Heads 2 and 5 concentrate sharply on the aircraft fuselage, wings, and tail with crisp boundary segmentation.
             \end{itemize}
         \end{exampleblock}
     \end{column}
 
     % Right Column: Quantitative Gains & Conclusion
     \begin{column}{0.44\textwidth}
-        \begin{exampleblock}{\textbf{Cải Thiện Định Lượng (CIFAR-10)}}
+        \begin{exampleblock}{\textbf{Quantitative Improvements (CIFAR-10)}}
             \small
             \begin{itemize}\setlength{\itemsep}{4pt}
                 \item \textbf{k-NN Top-1 ($k=10$)}:\\
                 $74.41\% \to \mathbf{75.97\%}$ (\textcolor{darkgreen}{\textbf{+1.56\% gain}}).
                 \item \textbf{Linear Probing Top-1}:\\
                 $81.46\% \to \mathbf{83.98\%}$ (\textcolor{darkgreen}{\textbf{+2.52\% gain}}).
-                \item \textbf{Tốc độ hội tụ phân loại}:\\
-                Epoch 10: $73.76\% \to \mathbf{79.86\%}$ (\textcolor{darkgreen}{\textbf{+6.10\%}}).
+                \item \textbf{Early Convergence Speed}:\\
+                Epoch 10: $73.76\% \to \mathbf{79.86\%}$ (\textcolor{darkgreen}{\textbf{+6.10\% boost}}).
             \end{itemize}
         \end{exampleblock}
         \vspace{-0.2em}
-        \begin{block}{\textbf{Kết Luận Phần 2}}
+        \begin{block}{\textbf{Takeaway for Part 2}}
             \footnotesize
-            2D RoPE + Sparse Attention giải quyết trọn vẹn bài toán bảo toàn hình học và khử nhiễu nền mà \textbf{không tăng chi phí tham số}.
+            2D RoPE + Sparse Attention eliminates geometric distortion and suppresses background noise \textbf{without adding any parameters}.
         \end{block}
     \end{column}
 \end{columns}
