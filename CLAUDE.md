@@ -1,353 +1,271 @@
 # CLAUDE.md — DINOv1 Self-Supervised Learning Framework
 
-Tài liệu kỹ thuật toàn diện cho repository **DINOv1** (Self-distillation with no labels - Caron et al., 2021) kết hợp hệ thống Registry module hóa, Frequency-Adaptive 2D RoPE và Spatial-Semantic Sparse Attention.
+Comprehensive technical reference for the **DINOv1** repository (*Self-distillation with no labels* — Caron et al., Meta AI, ICCV 2021) augmented with a Modular Component Registry, Frequency-Adaptive 2D RoPE, Spatial-Semantic Sparse Attention, and Stage-2 RLVR Dr. GRPO.
 
 ---
 
-## 1. Tổng quan dự án (Project Overview)
+## 1. Project Overview
 
-Repository này là bản triển khai hoàn chỉnh bằng PyTorch của phương pháp tự học tự giám sát (Self-Supervised Learning) **DINO** (Vision Transformer distillation without labels), được tối ưu hóa cho huấn luyện trên GPU đơn/máy trạm (như RTX 3070 8GB VRAM) với Mixed Precision (AMP) và Gradient Accumulation.
+This repository is a modular PyTorch research implementation of the self-supervised representation learning method **DINO** (Vision Transformer distillation without labels). It is engineered for single-GPU and workstation environments (e.g., RTX 3070 8GB VRAM) leveraging PyTorch Automatic Mixed Precision (AMP) and Gradient Accumulation.
 
-### Các cải tiến kiến trúc cốt lõi:
-1. **Modular Registry & Dynamic Builder System**:
-   - Quản lý linh hoạt các thành phần qua Decorator pattern (`@REGISTRY.register()`).
-   - Các registry toàn cục: `MODULES`, `BACKBONES`, `HEADS`, `MODELS`, `LOSSES`, `TRANSFORMS`, `OPTIMIZERS`, `SCHEDULERS`.
-   - Khởi tạo toàn bộ pipeline (backbone, head, loss, optimizer, scheduler) thông qua tệp cấu hình YAML.
-2. **Frequency-Adaptive 2D Rotary Position Embedding (RoPE)**:
-   - RoPE 2 chiều không gian cho Vision Transformer.
-   - Nội suy thích ứng tần số: tần số cao (chi tiết cục bộ) giữ toạ độ tuyệt đối (`raw`), tần số thấp (cấu trúc toàn cục) chuẩn hóa theo độ phân giải tham chiếu (`normalized`).
-   - Hỗ trợ các chế độ: `adaptive_2d`, `standard_2d`, `normalized_2d`, `learnable_2d`.
+### Core Architectural & Algorithmic Innovations:
+1. **Modular Registry & Declarative Builder System**:
+   - Component management via Decorator pattern (`@REGISTRY.register()`).
+   - Global registries: `MODULES`, `BACKBONES`, `HEADS`, `MODELS`, `LOSSES`, `TRANSFORMS`, `OPTIMIZERS`, `SCHEDULERS`.
+   - Complete pipeline instantiation (backbone, projection head, loss, optimizer, scheduler) driven by declarative YAML configurations.
+2. **Frequency-Adaptive 2D Rotary Position Embedding (2D RoPE)**:
+   - Extends RoPE to two-dimensional visual grids with frequency-aware coordinate adaptation.
+   - Frequency interpolation: High frequencies (local details) preserve raw integer coordinates (`raw`), while low frequencies (global topology) scale continuously (`normalized`) relative to a reference resolution ($224 \times 224$).
+   - Supported modes: `adaptive_2d`, `standard_2d`, `normalized_2d`, `learnable_2d`.
 3. **Spatial-Semantic Sparse Softmax Attention**:
-   - Cơ chế chú ý thưa duy trì phân phối Softmax chuẩn xác:
-     - **Local Spatial Window**: Kết nối lân cận trong cửa sổ $K \times K$.
-     - **Global Semantic Top-K**: Kết nối $K$ token có độ tương đồng cosine lớn nhất nằm ngoài cửa sổ cục bộ.
-     - **Bidirectional CLS Token Routing**: Token `[CLS]` luôn chú ý tới tất cả token và ngược lại.
+   - Retains exact Softmax probability normalization across 26 active tokens (86.8% reduction in attention pairs):
+     - **Local Spatial Window**: 9 spatial neighbors in a $3 \times 3$ window (Chebyshev radius $R=1$).
+     - **Global Semantic Top-$K$**: 16 keys with highest dot-product similarity outside the local window.
+     - **Bidirectional `[CLS]` Token Routing**: Unrestricted two-way communication between `[CLS]` and all patch tokens.
+4. **Stage-2 Unsupervised RLVR via Dr. GRPO**:
+   - Shared-prefix policy wrapper (`DINOGRPOPolicyWrapper`) freezing the first 10 ViT blocks and unlocking only the final 2 blocks, LayerNorm, and a residual patch gating head (8.27% parameters, < 3GB VRAM).
+   - Verifiable tri-objective visual rewards: horizontal-flip Geometric Equivariance IoU, spectral TokenCut foreground compactness, and target sparsity prior ($\rho_{\text{target}}=0.35$).
+   - Unbiased group-relative advantage estimation, DAPO-style asymmetric clipping, and analytical Bernoulli KL regularization against a frozen Stage-1 reference checkpoint.
 
 ---
 
-## 2. Cấu trúc thư mục (Directory Structure)
+## 2. Directory Structure
 
 ```
 DINOv1/
-├── checkpoints/               # Thư mục lưu checkpoint mô hình (.pth)
-├── configs/                   # Các tệp cấu hình YAML huấn luyện
-│   ├── dry_run.yaml               # Cấu hình kiểm thử nhanh (2 epochs, synthetic data)
-│   ├── vit_small_modular.yaml     # ViT-Small chuẩn với Registry builder
-│   ├── vit_small_200k.yaml        # ViT-Small huấn luyện chu kỳ dài
-│   └── vit_small_sparse_rope.yaml # ViT-Small tích hợp 2D RoPE + Sparse Attention
-├── core/                      # Hệ thống lõi (Core Engine)
-│   ├── __init__.py                # Export Registry và Builder
-│   ├── registry.py                # Lớp Registry quản lý định danh và khởi tạo
-│   └── builder.py                 # Hàm dựng: build_model, build_loss, build_optimizer, build_schedulers
-├── dino_datasets/             # Xử lý dữ liệu & Augmentations
+├── configs/                   # Declarative YAML training configurations
+│   ├── dry_run.yaml               # Rapid pipeline test (2 epochs, synthetic data fallback)
+│   ├── vit_small_modular.yaml     # Standard ViT-Small with Registry builder
+│   ├── vit_small_200k.yaml        # Long-schedule ViT-Small configuration
+│   └── vit_small_sparse_rope.yaml # ViT-Small integrating 2D RoPE + Sparse Attention
+├── core/                      # Core engine and component registry
+│   ├── __init__.py                # Exports Registry and Builder
+│   ├── registry.py                # Registry class managing string-to-class mappings
+│   └── builder.py                 # Factory methods: build_model, build_loss, build_optimizer, build_schedulers
+├── dino_datasets/             # Data loading and augmentations
 │   ├── __init__.py
-│   ├── transforms.py              # DataAugmentationDINO (Multi-crop: 2 global + N local)
-│   └── prepare_subset.py          # Script tải ImageNet subset từ Hugging Face Hub
-├── eval/                      # Các công cụ đánh giá & trực quan hóa
+│   ├── transforms.py              # DataAugmentationDINO (Multi-crop: 2 global + N local views)
+│   └── prepare_subset.py          # Hugging Face ImageNet subset downloader
+├── eval/                      # Evaluation suite and visualization
 │   ├── __init__.py
-│   ├── eval_linear.py             # Linear Probing evaluation
+│   ├── eval_utils.py              # Unified evaluation model loader and dataset factory
+│   ├── eval_linear.py             # Linear Probing evaluation with feature caching
 │   ├── eval_knn.py                # k-Nearest Neighbors classifier evaluation
-│   └── visualize_attention.py     # Trực quan hóa Attention Map của [CLS] token
-├── losses/                    # Hàm mất mát
+│   ├── eval_ablation_2x2.py       # Full 2x2 ablation benchmark (Architecture x Dr. GRPO)
+│   └── visualize_attention.py     # Multi-head [CLS] self-attention map renderer
+├── losses/                    # Self-supervised objective functions
 │   ├── __init__.py
-│   └── dino_loss.py               # DINOLoss với Teacher Centering & Sharpening
-├── models/                    # Kiến trúc mạng nơ-ron
-│   ├── __init__.py                # Export các mô hình và lớp
-│   ├── vision_transformer.py      # VisionTransformer chuẩn, ViT-Tiny, ViT-Small
-│   ├── rope.py                    # FrequencyAdaptive2DRoPE
-│   ├── sparse_attention.py        # SpatialSemanticAttention
-│   ├── dino_head.py               # DINOHead (MLP 3 lớp + L2 norm + WeightNorm Linear)
-│   ├── multi_crop_wrapper.py      # MultiCropWrapper gom nhóm crop theo độ phân giải
-├── utils/                     # Tiện ích tính toán & lịch học
+│   ├── dino_loss.py               # DINOLoss with Teacher Centering & Sharpening
+│   └── dr_grpo_loss.py            # DrGRPOLoss with verifiable visual rewards
+├── models/                    # Neural network architectures
 │   ├── __init__.py
-│   ├── schedulers.py              # Cosine scheduler, LRScheduler, get_params_groups (weight decay exclude)
-│   └── metrics.py                 # AverageMeter theo dõi loss và thời gian
-├── tests/                     # Toàn bộ 40 unit test kiểm thử tự động
-│   ├── test_builder.py
-│   ├── test_components_registration.py
-│   ├── test_configs.py
-│   ├── test_multi_crop_wrapper.py
-│   ├── test_registry.py
-│   ├── test_rope2d.py
-│   ├── test_sparse_attention.py
-│   ├── test_sparse_rope_training.py
-│   ├── test_vit_sparse_rope.py
-├── papers/                    # Tài liệu nghiên cứu gốc (dino_v1_2104.14294.pdf)
-├── data/                      # Thư mục dữ liệu cục bộ (train / val)
-├── train.py                   # Script thực thi huấn luyện DINO chính
-├── requirements.txt           # Danh sách thư viện phụ thuộc
-├── pytest.ini                 # Cấu hình kiểm thử pytest
-└── LICENSE                    # Giấy phép nguồn mở Apache 2.0
+│   ├── vision_transformer.py      # Standard & enhanced Vision Transformers (vit_tiny, vit_small)
+│   ├── rope.py                    # FrequencyAdaptive2DRoPE module
+│   ├── sparse_attention.py        # SpatialSemanticAttention & MultiScale2DWindowAttention
+│   ├── dino_head.py               # DINOHead (MLP + L2 norm + WeightNorm Linear)
+│   ├── multi_crop_wrapper.py      # MultiCropWrapper grouping crops by resolution
+│   └── grpo_policy_wrapper.py     # DINOGRPOPolicyWrapper for Stage-2 RLVR
+├── utils/                     # Computation and scheduling utilities
+│   ├── __init__.py
+│   ├── logging_utils.py           # Structured logger and FallbackSummaryWriter
+│   ├── saliency.py                # TokenCut spectral & spatial pseudo-mask generator
+│   ├── schedulers.py              # Cosine scheduler, LRScheduler, get_params_groups
+│   └── metrics.py                 # AverageMeter for loss and timing tracking
+├── tests/                     # Automated unit test suite (pytest)
+├── papers/                    # Research paper drafts (LaTeX & compiled PDF)
+├── slides/                    # Defense and presentation slides (LaTeX Beamer)
+├── data/                      # Local dataset storage (train / val)
+├── train.py                   # Stage-1 DINO pre-training execution script
+├── train_grpo_post.py         # Stage-2 RLVR Dr. GRPO post-training execution script
+├── pyproject.toml             # Standard PEP 517/518 package specification
+├── requirements.txt           # Python dependency specification
+├── pytest.ini                 # Pytest test discovery configuration
+└── LICENSE                    # Apache 2.0 Open Source License
 ```
 
 ---
 
-## 3. Chi tiết các thành phần (Component Deep Dive)
+## 3. Component Deep Dive
 
 ### 3.1. Core: Registry & Builder (`core/`)
 
 - **`Registry` (`core/registry.py`)**:
-  - Quản lý bảng ánh xạ giữa chuỗi định danh (`type`) và lớp/hàm Python.
-  - Hỗ trợ decorator: `@REGISTRY.register()`, `@REGISTRY.register("custom_name")`, hoặc gọi trực tiếp `REGISTRY.register(name, cls)`.
-  - Phương thức `build(cfg, **default_args)`: Lấy khóa `type` trong từ điển `cfg` và khởi tạo đối tượng với các tham số tương ứng.
-  - Các biến toàn cục:
-    - `MODULES`: Chứa các block, layer cơ bản (`Block`, `PatchEmbed`, `Attention`, `SpatialSemanticAttention`, `FrequencyAdaptive2DRoPE`, v.v.).
-    - `BACKBONES`: Chứa các kiến trúc trích xuất đặc trưng (`VisionTransformer`, `vit_tiny`, `vit_small`, `vit_tiny_sparse_rope`, `vit_small_sparse_rope`).
-    - `HEADS`: Chứa các projection head (`DINOHead`).
-    - `MODELS`: Chứa các model wrapper (`MultiCropWrapper`).
-    - `LOSSES`: Chứa hàm mất mát (`DINOLoss`).
-    - `TRANSFORMS`: Chứa các phép biến đổi tăng cường (`DataAugmentationDINO`, `GaussianBlur`, `Solarization`).
+  - Maps string identifiers (`type`) to Python classes or functions.
+  - Supports decorator usage: `@REGISTRY.register()`, `@REGISTRY.register("custom_name")`, or direct registration `REGISTRY.register(name, cls)`.
+  - Method `build(cfg, **default_args)`: Extracts the `type` key from dictionary `cfg` and instantiates the target object.
+  - Global registries:
+    - `MODULES`: Fundamental blocks (`Block`, `PatchEmbed`, `Attention`, `SpatialSemanticAttention`, `FrequencyAdaptive2DRoPE`).
+    - `BACKBONES`: Feature extractors (`VisionTransformer`, `vit_tiny`, `vit_small`, `vit_small_sparse_rope`).
+    - `HEADS`: Projection heads (`DINOHead`).
+    - `MODELS`: Wrapper architectures (`MultiCropWrapper`, `DINOGRPOPolicyWrapper`).
+    - `LOSSES`: Objectives (`DINOLoss`, `DrGRPOLoss`).
+    - `TRANSFORMS`: Data augmentations (`DataAugmentationDINO`, `GaussianBlur`, `Solarization`).
     - `OPTIMIZERS`: PyTorch optimizers (`AdamW`, `SGD`, `Adam`).
-    - `SCHEDULERS`: Bộ lập lịch học tập.
+    - `SCHEDULERS`: Learning rate and momentum schedulers.
 
 - **`Builder` (`core/builder.py`)**:
-  - `build_backbone(backbone_cfg)`: Xây dựng mạng backbone từ `BACKBONES`.
-  - `build_head(head_cfg, in_dim)`: Xây dựng projection head từ `HEADS`, tự động tiêm `in_dim` nếu cần.
+  - `build_backbone(backbone_cfg)`: Constructs backbone networks from `BACKBONES`.
+  - `build_head(head_cfg, in_dim)`: Constructs projection heads from `HEADS`, automatically injecting `in_dim`.
   - `build_model(cfg, device)`:
-    1. Tạo 2 backbone giống nhau cho **Student** và **Teacher**.
-    2. Xác định `embed_dim` (tự động suy diễn qua `embed_dim` hoặc `_infer_embed_dim()`).
-    3. Tạo 2 projection head cho Student và Teacher.
-    4. Bọc trong `MultiCropWrapper`.
-    5. Sao chép trọng số từ Student sang Teacher và đóng băng gradient của Teacher (`requires_grad = False`).
-  - `build_loss(cfg, device)`: Khởi tạo `DINOLoss`.
-  - `build_optimizer(model, cfg)`: Tách trọng số thành 2 nhóm (áp dụng weight decay cho ma trận trọng số, không áp dụng cho bias và LayerNorm) qua `get_params_groups`.
-  - `build_schedulers(optimizer, cfg, niter_per_ep)`: Tạo lịch Cosine annealing cho Learning Rate (có warmup), Weight Decay, và Teacher Momentum EMA ($0.996 \rightarrow 1.0$).
+    1. Instantiates identical backbones for **Student** and **Teacher**.
+    2. Resolves `embed_dim`.
+    3. Builds projection heads for Student and Teacher.
+    4. Encapsulates in `MultiCropWrapper`.
+    5. Synchronizes Teacher weights with Student and freezes Teacher parameters (`requires_grad = False`).
+  - `build_loss(cfg, device)`: Instantiates `DINOLoss`.
+  - `build_optimizer(model, cfg)`: Segregates parameters into weight decay groups (excluding bias and LayerNorm parameters) via `get_params_groups`.
+  - `build_schedulers(optimizer, cfg, niter_per_ep)`: Constructs Cosine schedules for Learning Rate (with warmup), Weight Decay, and Teacher Momentum EMA ($0.996 \to 1.0$).
 
 ---
 
 ### 3.2. Models (`models/`)
 
 #### Vision Transformer (`models/vision_transformer.py`)
-- Thực thi tiêu chuẩn kiến trúc ViT:
-  - `PatchEmbed`: Chiếu ảnh $C \times H \times W$ qua Convolution $16 \times 16$, phẳng hóa thành sequence.
-  - `Block`: LayerNorm $\rightarrow$ Multi-Head Attention (hoặc SpatialSemanticAttention) $\rightarrow$ Residual $\rightarrow$ LayerNorm $\rightarrow$ MLP $\rightarrow$ Residual.
-  - `interpolate_pos_encoding`: Nội suy 2D Bicubic cho positional embedding khi kích thước ảnh thay đổi (ví dụ ảnh local crop $96 \times 96$ so với $224 \times 224$).
-- Các biến thể có sẵn:
+- Standard ViT implementation with modular plug-and-play attention and positional embeddings:
+  - `PatchEmbed`: Projects $C \times H \times W$ images via $16 \times 16$ Convolution into 1D token sequences.
+  - `Block`: LayerNorm $\to$ Self-Attention (or SpatialSemanticAttention) $\to$ Residual $\to$ LayerNorm $\to$ MLP $\to$ Residual.
+  - `interpolate_pos_encoding`: 2D Bicubic interpolation for static positional tables when image resolutions vary ($96 \times 96 \leftrightarrow 224 \times 224$).
+- Pre-registered variants:
   - `vit_tiny`: `embed_dim=192`, `depth=12`, `num_heads=3`.
   - `vit_small`: `embed_dim=384`, `depth=12`, `num_heads=6`.
-  - `vit_tiny_sparse_rope`: ViT-Tiny tích hợp RoPE và Sparse Attention.
-  - `vit_small_sparse_rope`: ViT-Small tích hợp RoPE và Sparse Attention.
+  - `vit_tiny_sparse_rope`: ViT-Tiny with 2D RoPE and Sparse Attention.
+  - `vit_small_sparse_rope`: ViT-Small with 2D RoPE and Sparse Attention.
 
 #### Frequency-Adaptive 2D RoPE (`models/rope.py`)
-- Định vị vị trí quay 2D thay thế hoặc kết hợp với positional embedding tĩnh:
+- Rotates Query and Key vectors directly, encoding continuous 2D relative spatial displacements:
   $$\text{coordinate}_k = \alpha_k \cdot p_{\text{raw}} + (1 - \alpha_k) \cdot p_{\text{norm}}$$
-- Trong đó:
-  - Tần số cao (dải đầu): $\alpha_k \approx 1$ giữ toạ độ pixel tuyệt đối, bảo toàn cấu trúc cạnh, hoa văn chi tiết cục bộ.
-  - Tần số thấp (dải sau): $\alpha_k \approx 0$ chuẩn hóa theo tỷ lệ lưới tham chiếu ($224 \times 224$), giúp mô hình khái quát hóa khi độ phân giải đầu vào biến đổi.
-- Các chế độ hoạt động (`mode`):
-  - `adaptive_2d`: Tự động nội suy tuyến tính $\alpha_k$ từ $1.0 \rightarrow 0.0$ theo dải tần số.
-  - `standard_2d`: $\alpha_k = 1.0$ (chỉ dùng toạ độ raw).
-  - `normalized_2d`: $\alpha_k = 0.0$ (chỉ dùng toạ độ normalized).
-  - `learnable_2d`: $\alpha_k$ là tham số học được (`nn.Parameter` thông qua logit reparameterization).
+- Properties:
+  - High frequencies: $\alpha_k \approx 1$ preserves raw pixel coordinates for sharp local contours.
+  - Low frequencies: $\alpha_k \approx 0$ normalizes coordinates to reference grid ($224 \times 224$), preserving scale invariance across multi-crop views.
+- Operating modes: `adaptive_2d`, `standard_2d`, `normalized_2d`, `learnable_2d`.
 
 #### Spatial-Semantic Sparse Attention (`models/sparse_attention.py`)
-- Giải quyết bài toán độ phức tạp tính toán nhưng vẫn duy trì đặc tính Softmax toàn vẹn:
-  1. **Local Window ($K_{\text{local}} \times K_{\text{local}}$)**: Mỗi patch chú ý đến các patch lân cận trong bán kính không gian.
-  2. **Semantic Top-K ($K_{\text{semantic}}$)**: Chọn ra $K$ token có dot-product lớn nhất ngoài vùng lân cận để kết nối thông tin ngữ nghĩa đường dài.
-  3. **CLS Token Routing**: Luôn duy trì kết nối 2 chiều giữa token `[CLS]` và toàn bộ các token khác.
-- Các chế độ (`sparse_mode`): `sparse` (kết hợp cả local + semantic), `local_only`, `semantic_only`, `dense`.
+- Combines local spatial proximity with semantic Top-$K$ routing:
+  1. **Local Window ($3 \times 3$)**: 9 spatial neighbors (Chebyshev radius $R=1$).
+  2. **Semantic Top-$K$**: 16 keys with highest dot-product similarity outside the local window.
+  3. **Bidirectional `[CLS]` Routing**: Full communication between `[CLS]` and spatial tokens.
+- Maintains exact Softmax probability normalization over active keys $\mathcal{S}_i$.
 
 #### DINO Head (`models/dino_head.py`)
-- Chiếu đặc trưng từ không gian ViT (`embed_dim`) sang không gian phân phối nhãn tiềm ẩn lớn (`out_dim = 16384` hoặc $65536$).
-- Cấu trúc: MLP 3 lớp với Hidden Dimension 2048, Bottleneck 256, chuẩn hóa L2 normalization, và lớp Linear cuối cùng được ràng buộc bằng `weight_norm(..., norm_last_layer=True)`.
+- Projects features from backbone space (`embed_dim`) to high-dimensional latent prototype space (`out_dim = 16384` or $65536$).
+- 3-layer MLP with Hidden Dimension 2048, Bottleneck 256, L2 normalization, and `weight_norm(..., norm_last_layer=True)`.
 
 #### MultiCropWrapper (`models/multi_crop_wrapper.py`)
-- Nhận danh sách các crop ảnh có kích thước khác nhau (2 ảnh global $224 \times 224$ và 6 ảnh local $96 \times 96$).
-- Gom nhóm (group) các crop có cùng độ phân giải không gian để thực hiện forward theo batch, tối ưu hóa tốc độ GPU và bộ nhớ.
-- Hỗ trợ forward cả tensor đơn lẻ trong giai đoạn kiểm thử / inference.
+- Processes lists of multi-crop tensors (2 global $224 \times 224$ and 6 local $96 \times 96$).
+- Groups crops by spatial resolution to execute batched forward passes, maximizing GPU throughput.
 
 ---
 
-### 3.3. Losses & Huấn luyện tự giám sát (`losses/`)
+### 3.3. Losses (`losses/`)
 
 #### DINOLoss (`losses/dino_loss.py`)
-- Tính hàm mất mát Cross-Entropy giữa phân phối Student và phân phối Teacher:
-  $$\mathcal{L} = - \sum_{i \in \{1, 2\}} \sum_{j \ne i} P_t(x_i) \log P_s(x_j)$$
-- **Sharpening**:
-  - Student phân phối với nhiệt độ cố định $\tau_s = 0.1$.
-  - Teacher phân phối với nhiệt độ $\tau_t$ tăng tuyến tính (warmup từ $0.04 \rightarrow 0.04$ hoặc $0.07$) để tránh sụp đổ biểu diễn (representation collapse).
-- **Centering (Center update via EMA)**:
-  - Trừ đi vector tâm `center` của Teacher để tránh 1 chiều kích hoạt thống trị (collapse to uniform/constant):
-    $$C \leftarrow m \cdot C + (1 - m) \cdot \frac{1}{B} \sum_{i=1}^B g_t(x_i)$$
+- Computes cross-entropy between Student and Teacher probability distributions:
+  $$\mathcal{L}_{\text{DINO}} = - \sum_{i \in \{1, 2\}} \sum_{j \ne i} P_t(x_i) \log P_s(x_j)$$
+- **Sharpening**: Student uses fixed temperature $\tau_s = 0.1$; Teacher temperature $\tau_t$ warms up linearly ($0.04 \to 0.04$ or $0.07$) to avoid representation collapse.
+- **Centering (EMA Center Update)**: Subtracts moving average center vector $C$ from Teacher logits to prevent dominance by single dimensions:
+  $$C \leftarrow m \cdot C + (1 - m) \cdot \frac{1}{B} \sum_{i=1}^B g_t(x_i)$$
+
+#### DrGRPOLoss (`losses/dr_grpo_loss.py`)
+- Unbiased / Rank-Normalized Group Relative Policy Optimization loss for Stage-2 RLVR.
+- Optimizes verifiable visual rewards (Geometric Equivariance IoU, TokenCut spectral compactness, target sparsity prior) with DAPO asymmetric clipping and analytical Bernoulli KL regularization.
 
 ---
 
-### 3.4. Datasets & Data Augmentation (`dino_datasets/`)
+## 4. Workflows & Reproduction Commands
 
-- **Multi-crop Strategy**:
-  - **2 Global Crops** ($224 \times 224$): Che phủ vùng diện tích lớn (tỷ lệ $0.4 \rightarrow 1.0$), bao gồm ColorJitter, Grayscale, Gaussian Blur và Solarization. Chỉ Teacher và Student được nhìn thấy 2 crop này.
-  - **Local Crops** ($96 \times 96$, mặc định 6 crops): Che phủ vùng diện tích nhỏ (tỷ lệ $0.05 \rightarrow 0.4$), chỉ Student được nhìn thấy các crop này.
-- **Tải và chuẩn bị dữ liệu (`dino_datasets/prepare_subset.py`)**:
-  - Tải tập dữ liệu từ Hugging Face Hub (ví dụ `clane9/imagenet-100` hoặc `Maysee/tiny-imagenet`) và trích xuất thành cấu trúc thư mục chuẩn `ImageFolder`:
-    ```
-    data/
-    ├── train/
-    │   ├── class_0000/
-    │   └── class_0001/
-    └── validation/
-    ```
-
----
-
-## 4. Hướng dẫn sử dụng & Quy trình làm việc (Workflows & Commands)
-
-### 4.1. Môi trường phát triển (Environment Setup)
-
-Dự án sử dụng Python 3.12+ và môi trường ảo đặt tại `.venv`:
+### 4.1. Environment Setup
 
 ```bash
-# Kích hoạt môi trường ảo
+# Activate virtual environment
 source .venv/bin/activate
 
-# Cài đặt các gói phụ thuộc nếu cần
+# Install dependencies and editable package
 pip install -r requirements.txt
+pip install -e .
 ```
 
-### 4.2. Chạy kiểm thử tự động (Running Tests)
+### 4.2. Automated Testing
 
-Tất cả 40 unit test đã được kiểm thử và vượt qua:
+All unit tests are located in `tests/`:
 
 ```bash
-# Chạy toàn bộ test
-.venv/bin/pytest tests -v
+# Run complete test suite
+pytest tests -v
 
-# Chạy kiểm thử riêng lẻ theo từng module
-.venv/bin/pytest tests/test_rope2d.py -v
-.venv/bin/pytest tests/test_sparse_attention.py -v
-.venv/bin/pytest tests/test_builder.py -v
-.venv/bin/pytest tests/test_configs.py -v
-.venv/bin/pytest tests/test_sparse_rope_training.py -v
+# Run individual module tests
+pytest tests/test_rope2d.py -v
+pytest tests/test_sparse_attention.py -v
+pytest tests/test_builder.py -v
+pytest tests/test_dr_grpo_pipeline.py -v
 ```
 
-### 4.3. Chuẩn bị tập dữ liệu (Dataset Preparation)
+### 4.3. Stage-1 Pre-Training
 
 ```bash
-# Tải và chuẩn bị ImageNet-100 từ Hugging Face Hub
-python dino_datasets/prepare_subset.py --dataset clane9/imagenet-100 --output_dir data
-```
-
-*Lưu ý:* Nếu chưa tải dữ liệu, khi chạy `train.py`, hệ thống sẽ tự động tạo thư mục dummy `data/train/dummy` với 64 ảnh ngẫu nhiên để phục vụ kiểm thử chạy thông luồng (dry-run).
-
-### 4.4. Huấn luyện mô hình (Training)
-
-```bash
-# 1. Chạy thử nghiệm nhanh (Dry run)
+# Dry run verification
 python train.py --config configs/dry_run.yaml
 
-# 2. Huấn luyện ViT-Small chuẩn qua Modular Registry
+# Train standard ViT-Small
 python train.py --config configs/vit_small_modular.yaml
 
-# 3. Huấn luyện ViT-Small kết hợp Frequency-Adaptive 2D RoPE & Sparse Attention
+# Train ViT-Small with Frequency-Adaptive 2D RoPE & Sparse Attention
 python train.py --config configs/vit_small_sparse_rope.yaml
 ```
 
-**Chiến lược tối ưu hóa bộ nhớ:**
-- `batch_size_per_gpu: 32` kết hợp `gradient_accumulation_steps: 4` tạo thành Effective Batch Size = 128.
-- Kích hoạt PyTorch Automatic Mixed Precision (`torch.cuda.amp.autocast`) giúp chạy ổn định trên các GPU có 8GB VRAM (như RTX 3070).
+### 4.4. Stage-2 RLVR Dr. GRPO Post-Training
 
-### 4.5. Đánh giá mô hình (Evaluation)
-
-Hệ thống hỗ trợ cả định dạng `image_folder` (ImageNet / ImageNet-100) và các tập downstream chuẩn của DINO (`cifar10`, `cifar100`), đồng thời hỗ trợ cả kiến trúc chuẩn (`vit_small`, `vit_tiny`) lẫn biến thể tích hợp RoPE (`vit_small_sparse_rope`, `vit_tiny_sparse_rope`).
-
-#### 1. Đánh giá k-Nearest Neighbors (k-NN Classifier)
-Trích xuất đặc trưng của tập train và val từ Teacher backbone đã đóng băng, tính độ tương đồng cosine và dự đoán nhãn:
 ```bash
-# Đánh giá ViT-Small chuẩn
-python eval/eval_knn.py \
-    --data_path data/cifar10 \
-    --dataset cifar10 \
-    --pretrained_weights weight_df/checkpoints_default_1/checkpoint0040.pth \
-    --arch vit_small \
-    --k 20
+python train_grpo_post.py \
+    --train_data_path data/train \
+    --eval_data_path data/cifar10 \
+    --eval_dataset cifar10 \
+    --variant both \
+    --epochs 10 \
+    --batch_size 64 \
+    --group_size 8 \
+    --adv_type dr_grpo \
+    --reward_mode self_supervised_v1
+```
 
-# Đánh giá ViT-Small tích hợp RoPE & Sparse Attention
+### 4.5. Evaluation Suite
+
+#### $k$-Nearest Neighbors ($k$-NN) Evaluation
+```bash
 python eval/eval_knn.py \
     --data_path data/cifar10 \
     --dataset cifar10 \
-    --pretrained_weights weight_rope/checkpoints_rope_1/checkpoint0040.pth \
+    --pretrained_weights cp/checkpoints_rope_2/checkpoint0190.pth \
     --arch vit_small_sparse_rope \
     --k 20
 ```
 
-#### 2. Đánh giá Linear Probing
-Huấn luyện một lớp Linear Classifier trên đầu các biểu diễn đặc trưng đóng băng của backbone (hỗ trợ `--cache_features` giúp tăng tốc độ tối đa):
+#### Linear Probing Evaluation
 ```bash
-# Huấn luyện Linear Classifier trên ViT-Small chuẩn
 python eval/eval_linear.py \
     --data_path data/cifar10 \
     --dataset cifar10 \
-    --pretrained_weights weight_df/checkpoints_default_1/checkpoint0040.pth \
-    --arch vit_small \
-    --epochs 30 \
-    --lr 0.1 \
-    --cache_features
-
-# Huấn luyện Linear Classifier trên ViT-Small RoPE
-python eval/eval_linear.py \
-    --data_path data/cifar10 \
-    --dataset cifar10 \
-    --pretrained_weights weight_rope/checkpoints_rope_1/checkpoint0040.pth \
+    --pretrained_weights cp/checkpoints_rope_2/checkpoint0190.pth \
     --arch vit_small_sparse_rope \
     --epochs 30 \
     --lr 0.1 \
     --cache_features
 ```
 
-#### 3. Trực quan hóa Attention Map (Self-Attention Maps Visualization)
-Trích xuất và vẽ bản đồ chú ý của `[CLS]` token trên các attention head khác nhau:
+#### Full $2 \times 2$ Ablation Benchmark
+```bash
+python eval/eval_ablation_2x2.py \
+    --data_path data/cifar10 \
+    --dataset cifar10 \
+    --batch_size 128 \
+    --max_train_samples 0 \
+    --max_val_samples 0
+```
+
+#### Self-Attention Map Visualization
 ```bash
 python eval/visualize_attention.py \
     --image_path output/sample_airplane.jpg \
-    --pretrained_weights weight_rope/checkpoints_rope_1/checkpoint0040.pth \
+    --pretrained_weights cp/checkpoints_rope_2/checkpoint0190.pth \
     --arch vit_small_sparse_rope \
     --output_dir output
 ```
-Kết quả ảnh trực quan hóa sẽ được lưu phân biệt theo kiến trúc: `output/attn_map_{arch}.png`.
-
----
-
-## 5. Hướng dẫn mở rộng hệ thống (Extending the Codebase)
-
-### Cách đăng ký thêm Backbone mới:
-```python
-from core.registry import BACKBONES
-import torch.nn as nn
-
-@BACKBONES.register("my_custom_vit")
-def build_custom_vit(patch_size=16, **kwargs):
-    # Khởi tạo mô hình tuỳ biến
-    return MyCustomViT(...)
-```
-
-### Cách đăng ký thêm Hàm mất mát (Loss) mới:
-```python
-from core.registry import LOSSES
-import torch.nn as nn
-
-@LOSSES.register("MyContrastiveLoss")
-class MyContrastiveLoss(nn.Module):
-    def __init__(self, temperature=0.07):
-        super().__init__()
-        ...
-```
-
-Sau khi đăng ký, chỉ cần chỉ định tên định danh trong trường `type` của tệp YAML cấu hình, hàm `core.builder.build_model` hoặc `build_loss` sẽ tự động phân giải và khởi tạo mà không cần sửa đổi mã nguồn điều phối `train.py`.
-
----
-
-## 6. Bảng quy chuẩn thông số cấu hình YAML (YAML Config Reference)
-
-| Khóa cấu hình | Ý nghĩa & Giá trị khuyến nghị |
-|---|---|
-| `dataset.data_path` | Đường dẫn thư mục chứa dữ liệu (`data/train`) |
-| `dataset.global_crops_scale` | Khoảng scale cho ảnh global, khuyến nghị `[0.4, 1.0]` |
-| `dataset.local_crops_scale` | Khoảng scale cho ảnh local, khuyến nghị `[0.05, 0.4]` |
-| `dataset.local_crops_number`| Số lượng ảnh crop cục bộ (mặc định: `6`) |
-| `model.backbone.type` | Định danh backbone trong Registry (`vit_small`, `vit_small_sparse_rope`) |
-| `model.backbone.rope_cfg` | Cấu hình RoPE (`mode: adaptive_2d`, `base: 10000.0`, `ref_img_size: 224`) |
-| `model.backbone.sparse_attn_cfg` | Cấu hình Sparse Attention (`k_local_window: 3`, `k_semantic: 16`) |
-| `model.head.out_dim` | Số chiều vector đầu ra của Projection Head (mặc định: `16384`) |
-| `train.batch_size_per_gpu` | Kích thước batch cục bộ trên mỗi GPU (`32` cho 8GB VRAM) |
-| `train.gradient_accumulation_steps` | Số bước tích lũy gradient trước khi cập nhật trọng số |
-| `train.momentum_teacher` | Hệ số momentum cập nhật trọng số Teacher qua EMA ($0.996 \rightarrow 1.0$) |
-| `train.clip_grad` | Giới hạn chuẩn gradient tối đa (khuyến nghị: `3.0`) |
