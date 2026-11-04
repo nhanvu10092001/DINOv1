@@ -54,7 +54,7 @@
         DINOv1
     \end{beamercolorbox}%
     \begin{beamercolorbox}[wd=.20\paperwidth,ht=2.4ex,dp=0.8ex,right]{palette primary}%
-        Slide \insertframenumber{} / 5\hspace*{3ex}
+        Slide \insertframenumber{} / 8\hspace*{3ex}
     \end{beamercolorbox}}%
     \vskip0pt%
 }
@@ -79,9 +79,126 @@
 \begin{document}
 
 % ==============================================================================
-% SLIDE 1: MOTIVATION & PROBLEM STATEMENT
+% SLIDE 1 (1/3): DINOv1 SELF-DISTILLATION ARCHITECTURE
 % ==============================================================================
-\begin{frame}{1. Motivation: Bottlenecks in Vanilla ViT (DINOv1)}
+\begin{frame}{1. DINOv1 Theory (1/3): Self-Distillation with No Labels}
+\vspace{-0.4em}
+DINO (\textbf{DI}stillation with \textbf{NO} labels) frames self-supervised learning as knowledge distillation from a momentum Teacher to a Student:
+
+\vspace{0.2em}
+\begin{columns}[t]
+    % Column 1: Student-Teacher Architecture
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{Student--Teacher Architecture}}
+            \small
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Shared Network $g = h \circ f$}: Student ($g_{\theta_s}$) and Teacher ($g_{\theta_t}$) share a ViT/ResNet backbone $f$ and 3-layer MLP head $h$.
+                \item \textbf{Projection Bottleneck}: Uses $\ell_2$-normalization and a weight-normalized linear layer ($K = 65536$ dims).
+            \end{itemize}
+        \end{block}
+    \end{column}
+
+    % Column 2: Momentum Teacher (EMA)
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{Momentum Teacher Update (EMA)}}
+            \small
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Stop-Gradient on Teacher}: Gradients update only Student $\theta_s$; Teacher updates via EMA: $\theta_t \leftarrow \lambda \theta_t + (1 - \lambda) \theta_s$.
+                \item \textbf{Polyak-Ruppert Ensemble}: With $\lambda \in [0.996, 1]$, Teacher acts as a dynamic ensemble that guides the Student.
+            \end{itemize}
+        \end{block}
+    \end{column}
+\end{columns}
+
+\vspace{0.3em}
+\begin{exampleblock}{\textbf{Core Principle}}
+    \centering\small
+    The Student distills knowledge from an \textbf{evolving online Teacher} built from its own past iterations.
+\end{exampleblock}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 1 (2/3): MULTI-CROP & DISTILLATION OBJECTIVE
+% ==============================================================================
+\begin{frame}{1. DINOv1 Theory (2/3): Multi-Crop \& Distillation Objective}
+\vspace{-0.4em}
+To encourage \textbf{local-to-global correspondence}, DINO extracts a set $V$ of multiple distorted views from each input image $x$:
+
+\vspace{0.2em}
+\begin{columns}[t]
+    % Column 1: Softmax & Cross-Entropy Objective
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{Temperature-Scaled Distillation Loss}}
+            \small
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Softmax Probability}: $P_s(x)^{(i)} = \dfrac{\exp(g_{\theta_s}(x)^{(i)} / \tau_s)}{\sum_{k=1}^K \exp(g_{\theta_s}(x)^{(k)} / \tau_s)}$.
+                \item \textbf{Cross-Entropy Loss}: Minimizes $\sum_{x \in \{x_1^g, x_2^g\}} \sum_{x' \in V \setminus \{x\}} H\big(P_t(x), P_s(x')\big)$ where $H(a,b) = -a \log b$.
+            \end{itemize}
+        \end{block}
+    \end{column}
+
+    % Column 2: Multi-Crop Strategy
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{Multi-Crop View Assignment}}
+            \small
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Global Views $\{x_1^g, x_2^g\}$}: Two high-resolution crops ($224^2$, covering $>50\%$ image area) are passed through \textbf{both Teacher and Student}.
+                \item \textbf{Local Views}: Multiple small-resolution crops ($96^2$, covering $<50\%$ area) are passed \textbf{only through the Student}.
+            \end{itemize}
+        \end{block}
+    \end{column}
+\end{columns}
+
+\vspace{0.3em}
+\begin{exampleblock}{\textbf{Local-to-Global Correspondence}}
+    \centering\small
+    Predicting Teacher's global context from Student's local patches forces the backbone to learn \textbf{high-level semantic context}.
+\end{exampleblock}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 1 (3/3): COLLAPSE PREVENTION & EMERGENT ViT PROPERTIES
+% ==============================================================================
+\begin{frame}{1. DINOv1 Theory (3/3): Collapse Prevention \& ViT Properties}
+\vspace{-0.4em}
+DINO avoids representation collapse without contrastive negative pairs or predictor networks, unlocking unique properties in Vision Transformers:
+
+\vspace{0.2em}
+\begin{columns}[t]
+    % Column 1: Collapse Prevention
+    \begin{column}{0.49\textwidth}
+        \begin{alertblock}{\textbf{Collapse Prevention: Centering vs. Sharpening}}
+            \small
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Centering ($g_t(x) \leftarrow g_t(x) - c$)}: Prevents a single dimension from dominating by subtracting batch EMA center $c \leftarrow m c + (1 - m) \frac{1}{B} \sum_{i=1}^B g_{\theta_t}(x_i)$.
+                \item \textbf{Sharpening ($\tau_t \ll \tau_s$)}: Uses low Teacher temperature ($\tau_t = 0.04$, $\tau_s = 0.1$) to prevent collapse to a uniform distribution.
+            \end{itemize}
+        \end{alertblock}
+    \end{column}
+
+    % Column 2: Emergent Properties
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{Emergent Properties in DINO + ViT}}
+            \small
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Unsupervised Object Segmentation}: Self-attention maps of the \texttt{[CLS]} token automatically segment foreground object boundaries without labels.
+                \item \textbf{Clustering for $k$-NN}: Frozen ViT features form well-separated semantic clusters, achieving strong $k$-NN classification ($78.3\%$ Top-1 on ImageNet).
+            \end{itemize}
+        \end{block}
+    \end{column}
+\end{columns}
+
+\vspace{0.3em}
+\begin{exampleblock}{\textbf{Key Takeaway from DINOv1}}
+    \centering\small
+    The synergy of \textbf{Self-Distillation + Momentum Teacher + Multi-Crop} makes ViT features naturally semantic and boundary-aware.
+\end{exampleblock}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 2: MOTIVATION & PROBLEM STATEMENT
+% ==============================================================================
+\begin{frame}{2. Motivation: Bottlenecks in Vanilla ViT (DINOv1)}
 \vspace{-0.4em}
 In the standard DINOv1 baseline (\texttt{ViT-Small/16}), two core components introduce major bottlenecks:
 
@@ -118,9 +235,9 @@ In the standard DINOv1 baseline (\texttt{ViT-Small/16}), two core components int
 \end{frame}
 
 % ==============================================================================
-% SLIDE 2: OVERVIEW OF THE 2 ARCHITECTURAL ENHANCEMENTS
+% SLIDE 3: OVERVIEW OF THE 2 ARCHITECTURAL ENHANCEMENTS
 % ==============================================================================
-\begin{frame}{2. Architectural Overview: Baseline vs. Proposed ViT Block}
+\begin{frame}{3. Architectural Overview: Baseline vs. Proposed ViT Block}
 \vspace{-0.3em}
 \begin{columns}[c]
     % Left Column: TikZ Comparison Diagram
@@ -192,9 +309,9 @@ In the standard DINOv1 baseline (\texttt{ViT-Small/16}), two core components int
 \end{frame}
 
 % ==============================================================================
-% SLIDE 3: COMPONENT 1 — FREQUENCY-ADAPTIVE 2D RoPE
+% SLIDE 4: COMPONENT 1 — FREQUENCY-ADAPTIVE 2D RoPE
 % ==============================================================================
-\begin{frame}{3. Component 1: Frequency-Adaptive 2D Rotary Position Embedding}
+\begin{frame}{4. Component 1: Frequency-Adaptive 2D Rotary Position Embedding}
 \vspace{-0.3em}
 \begin{columns}[t]
     % Column 1: Formulation & Relative Property
@@ -236,9 +353,9 @@ In the standard DINOv1 baseline (\texttt{ViT-Small/16}), two core components int
 \end{frame}
 
 % ==============================================================================
-% SLIDE 4: COMPONENT 2 — SPATIAL-SEMANTIC SPARSE ATTENTION
+% SLIDE 5: COMPONENT 2 — SPATIAL-SEMANTIC SPARSE ATTENTION
 % ==============================================================================
-\begin{frame}{4. Component 2: Spatial-Semantic Sparse Softmax Attention}
+\begin{frame}{5. Component 2: Spatial-Semantic Sparse Softmax Attention}
 \vspace{-0.2em}
 \begin{columns}[c]
     % Column 1: TikZ Visual Grid Support
@@ -316,9 +433,9 @@ In the standard DINOv1 baseline (\texttt{ViT-Small/16}), two core components int
 \end{frame}
 
 % ==============================================================================
-% SLIDE 5: VISUAL VERIFICATION & PERFORMANCE GAINS
+% SLIDE 6: VISUAL VERIFICATION & PERFORMANCE GAINS
 % ==============================================================================
-\begin{frame}{5. Visual Evidence: Attention Maps \& Empirical Gains}
+\begin{frame}{6. Visual Evidence: Attention Maps \& Empirical Gains}
 \vspace{-0.3em}
 \begin{columns}[c]
     % Left Column: Real Attention Map Sample
