@@ -174,7 +174,178 @@
 \end{frame}
 
 % ==============================================================================
-% SLIDE 3: VISUAL BREAKDOWN OF THE 3 BOTTLENECKS
+% SLIDE 3: DINOv1 FOUNDATION: SELF-DISTILLATION ARCHITECTURE
+% ==============================================================================
+\begin{frame}{The Foundation: DINOv1 Self-Distillation Framework}
+\vspace{-0.4em}
+\textbf{DINO} (\textbf{DI}stillation with \textbf{NO} labels -- Caron et al., Meta AI, ICCV 2021) revolutionized self-supervised learning:
+
+\vspace{0.2em}
+\begin{columns}[c]
+    % Column 1: TikZ Framework Pipeline
+    \begin{column}{0.54\textwidth}
+        \centering
+        \resizebox{\linewidth}{!}{%
+        \begin{tikzpicture}[
+            font=\sffamily\scriptsize,
+            >=Latex,
+            box/.style={draw=black!70, rounded corners=3pt, align=center, inner sep=3pt, line width=0.6pt},
+            bluebox/.style={box, fill=softblue, draw=borderblue},
+            greenbox/.style={box, fill=softgreen, draw=bordergreen},
+            redbox/.style={box, fill=softred, draw=borderred},
+            graybox/.style={box, fill=cardbg, draw=black!55},
+            arrow/.style={->, line width=0.8pt, draw=black!75}
+        ]
+            % Image Input
+            \node[box, fill=softorange, draw=borderorange, text width=2.4cm] (img) at (0, 2.5) {\textbf{Input Image $x$}\\ \tiny Multi-crop crops};
+            
+            % Global & Local Views
+            \node[bluebox, text width=2.3cm] (global) at (-2.2, 1.4) {\textbf{Global Views $x^g$}\\ \tiny $2\times 224^2$ ($>50\%$ area)};
+            \node[graybox, text width=2.3cm] (local) at (2.2, 1.4) {\textbf{Local Views $x^l$}\\ \tiny $6\times 96^2$ ($<50\%$ area)};
+            
+            % Teacher and Student
+            \node[greenbox, text width=2.4cm] (teacher) at (-2.3, -0.05) {\textbf{Teacher $g_{\theta_t}$}\\ \tiny ViT-S + Projection Head $h$};
+            \node[bluebox, text width=2.4cm] (student) at (2.3, -0.05) {\textbf{Student $g_{\theta_s}$}\\ \tiny ViT-S + Projection Head $h$};
+            
+            % Arrows from Views
+            \draw[arrow] (img) -| (global);
+            \draw[arrow] (img) -| (local);
+            \draw[arrow] (global) -- (teacher);
+            \draw[arrow] (global) -- (student);
+            \draw[arrow] (local) -- (student);
+            
+            % Centering / Sharpening & Softmax
+            \node[greenbox, text width=2.4cm] (t_out) at (-2.3, -1.25) {\textbf{Centering \& Sharp.}\\ \tiny $P_t(x) = \text{Softmax}\left(\frac{g_t - c}{\tau_t}\right)$};
+            \node[bluebox, text width=2.4cm] (s_out) at (2.3, -1.25) {\textbf{Student Softmax}\\ \tiny $P_s(x) = \text{Softmax}\left(\frac{g_s}{\tau_s}\right)$};
+            
+            \draw[arrow] (teacher) -- (t_out);
+            \draw[arrow] (student) -- (s_out);
+            
+            % Loss
+            \node[redbox, text width=4.6cm] (loss) at (0, -2.45) {\textbf{Cross-Entropy Distillation Loss}\\ \tiny $\mathcal{L}_{\text{DINO}} = -\sum P_t(x) \log P_s(x')$};
+            \draw[arrow] (t_out) |- (loss);
+            \draw[arrow] (s_out) |- (loss);
+            
+            % Updates
+            \draw[arrow, crimsonred, dashed, line width=1pt] (loss) -| node[right, font=\tiny\bfseries] {Backprop ($\nabla \theta_s$)} (3.65, -0.05) -- (student);
+            \draw[arrow, darkgreen, line width=1.1pt] (student) -- node[above=1pt, font=\fontsize{6.5pt}{7.5pt}\selectfont\bfseries] {Polyak-Ruppert EMA} (teacher);
+            \node[draw=crimsonred, fill=white, inner sep=1.5pt, font=\tiny\bfseries, text=crimsonred] at (-2.3, 0.65) {Stop-Grad};
+        \end{tikzpicture}%
+        }
+    \end{column}
+
+    % Column 2: Core Architecture Pillars
+    \begin{column}{0.45\textwidth}
+        \begin{block}{\textbf{Student--Teacher Dynamics}}
+            \small
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Identical Architecture}: Both networks share a ViT backbone and 3-layer MLP ($K=65,536$ dims).
+                \item \textbf{Online Momentum Teacher}: Updated strictly via Polyak-Ruppert EMA ($\lambda \in [0.996, 1.0]$) with \textbf{no backpropagation}.
+            \end{itemize}
+        \end{block}
+        
+        \vspace{0.2em}
+        \begin{exampleblock}{\textbf{Local-to-Global Induction}}
+            \small
+            Teacher sees only \textbf{global scenes}; Student must predict the whole scene from \textbf{small local glimpses}.
+        \end{exampleblock}
+    \end{column}
+\end{columns}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 4: DINOv1 MATHEMATICS: COLLAPSE PREVENTION
+% ==============================================================================
+\begin{frame}{DINOv1 Mechanics: Centering, Sharpening \& Loss}
+\vspace{-0.5em}
+Unlike contrastive methods (SimCLR, MoCo), DINO requires \textbf{no negative pairs}. How does it avoid collapse?
+
+\vspace{0.1em}
+\begin{columns}[t]
+    % Column 1: Centering vs Sharpening
+    \begin{column}{0.49\textwidth}
+        \begin{alertblock}{\textbf{Centering (Prevents Dominance)}}
+            \footnotesize
+            Subtracts dynamic EMA center vector $\mathbf{c} \in \mathbb{R}^K$:
+            \begin{align*}
+                g_t(x) &\leftarrow g_t(x) - \mathbf{c} \\
+                \mathbf{c} &\leftarrow m \mathbf{c} + (1 - m) \tfrac{1}{B} \sum_{i=1}^B g_{\theta_t}(x_i)
+            \end{align*}
+            \vspace{-0.7em}
+            \begin{itemize}\setlength{\itemsep}{0pt}
+                \item Pulls predictions towards uniform.
+                \item Prevents collapse to a single dimension!
+            \end{itemize}
+        \end{alertblock}
+    \end{column}
+
+    % Column 2: Sharpening
+    \begin{column}{0.49\textwidth}
+        \begin{exampleblock}{\textbf{Sharpening (Prevents Uniformity)}}
+            \footnotesize
+            Uses asymmetric temperatures ($\tau_t \ll \tau_s$):
+            \[
+                P_t(x)^{(k)} = \frac{\exp\big((g_{\theta_t}(x)^{(k)} - c^{(k)}) / \tau_t\big)}{\sum_{j=1}^K \exp\big((g_{\theta_t}(x)^{(j)} - c^{(j)}) / \tau_t\big)}
+            \]
+            \vspace{-0.7em}
+            \begin{itemize}\setlength{\itemsep}{0pt}
+                \item $\tau_s = 0.1$, while $\tau_t \in [0.04, 0.07]$.
+                \item Low temperature sharpens peak probability.
+                \item Prevents collapse to uniform entropy!
+            \end{itemize}
+        \end{exampleblock}
+    \end{column}
+\end{columns}
+
+\vspace{0.2em}
+\begin{block}{\textbf{Dynamic Thermodynamic Equilibrium}}
+    \centering\footnotesize
+    $\mathbf{c}$ acts as a repulsive center force; low $\tau_t$ acts as an attractive sharpening force.\\
+    Their interaction guarantees stable, non-collapsed representation learning without contrastive negatives.
+\end{block}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 5: DINOv1 BREAKTHROUGH: EMERGENT PROPERTIES IN ViTs
+% ==============================================================================
+\begin{frame}{The Breakthrough of DINOv1: Emergent Properties in ViTs}
+\vspace{-0.4em}
+Prior to DINO, self-supervised learning flourished on CNNs but failed to scale cleanly on Vision Transformers:
+
+\vspace{0.2em}
+\begin{columns}[t]
+    % Column 1: Unsupervised Object Segmentation
+    \begin{column}{0.49\textwidth}
+        \begin{exampleblock}{\textbf{1. Emergent Object Segmentation}}
+            \small
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{Explicit Scene De-occlusion}: Self-attention maps of the last-layer \texttt{[CLS]} token segment physical object boundaries \textbf{completely without supervision}.
+                \item \textbf{Head Specialization}: Different heads naturally capture foreground objects, textures, and background contours without any human bounding boxes.
+            \end{itemize}
+        \end{exampleblock}
+    \end{column}
+
+    % Column 2: Linear & k-NN Separability
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{2. High-Quality Semantic Clustering}}
+            \small
+            \begin{itemize}\setlength{\itemsep}{2pt}
+                \item \textbf{High-Performance $k$-NN}: Direct $k$-nearest neighbor classification on frozen ViT features achieves \textbf{78.3\%} Top-1 on ImageNet-1K without fine-tuning.
+                \item \textbf{Geometric Semantics}: Feature manifolds group semantically related concepts together.
+            \end{itemize}
+        \end{block}
+    \end{column}
+\end{columns}
+
+\vspace{0.3em}
+\begin{alertblock}{\textbf{The Unsolved Dilemma: Why DINOv1 Needs Enhancement}}
+    \centering\small
+    Despite this brilliance, standard DINOv1 ViTs suffer from \textbf{coordinate warping under multi-crop}, \textbf{quadratic attention dilution}, and \textbf{residual background halos}.
+\end{alertblock}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 6: VISUAL BREAKDOWN OF THE 3 BOTTLENECKS
 % ==============================================================================
 \begin{frame}{The Problem: 3 Structural Flaws in Vanilla DINOv1}
 \vspace{-0.3em}
