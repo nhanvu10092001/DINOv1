@@ -115,18 +115,28 @@ def main(cfg):
         "local_crops_number": cfg["dataset"]["local_crops_number"],
     })
 
-    if not os.path.exists(cfg["dataset"]["data_path"]):
-        print(f"WARNING: Dataset path {cfg['dataset']['data_path']} not found.")
-        print("Creating a dummy ImageFolder for dry-run testing...")
-        os.makedirs(os.path.join(cfg["dataset"]["data_path"], "dummy"), exist_ok=True)
-        import numpy as np
-        from PIL import Image
+    data_path = cfg["dataset"]["data_path"]
+    allow_dummy = cfg.get("allow_dummy", False)
+    if not os.path.exists(data_path):
+        if allow_dummy or "dry_run" in cfg.get("config_name", ""):
+            print(f"WARNING: Dataset path {data_path} not found.")
+            print("Creating a dummy ImageFolder for dry-run testing...")
+            dummy_dir = os.path.join(data_path, "dummy")
+            os.makedirs(dummy_dir, exist_ok=True)
+            import numpy as np
+            from PIL import Image
 
-        for i in range(64):
-            im = Image.fromarray(np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8))
-            im.save(os.path.join(cfg["dataset"]["data_path"], "dummy", f"{i}.jpg"))
+            for i in range(64):
+                im = Image.fromarray(np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8))
+                im.save(os.path.join(dummy_dir, f"{i}.jpg"))
+        else:
+            raise FileNotFoundError(
+                f"Dataset path '{data_path}' was not found!\n"
+                f"Please download/prepare the dataset first (e.g., via 'python dino_datasets/prepare_subset.py') "
+                f"or add '--allow_dummy' to generate synthetic data for dry runs."
+            )
 
-    dataset = datasets.ImageFolder(cfg["dataset"]["data_path"], transform=transform)
+    dataset = datasets.ImageFolder(data_path, transform=transform)
     data_loader = DataLoader(
         dataset,
         batch_size=cfg["train"]["batch_size_per_gpu"],
@@ -187,9 +197,14 @@ def main(cfg):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DINO self-supervised training")
     parser.add_argument("--config", default="configs/vit_small_sparse_rope.yaml", type=str)
+    parser.add_argument("--allow_dummy", action="store_true", help="Allow generating synthetic data if data_path missing")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
+
+    if args.allow_dummy:
+        cfg["allow_dummy"] = True
+    cfg["config_name"] = os.path.basename(args.config)
 
     main(cfg)

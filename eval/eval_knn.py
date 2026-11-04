@@ -10,6 +10,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import models
 import models.vision_transformer as vits
 from core.registry import BACKBONES
+from eval.eval_utils import build_eval_model, load_eval_data
+
+load_data = load_eval_data
 
 @torch.no_grad()
 def extract_features(model, data_loader, device):
@@ -64,62 +67,6 @@ def knn_classifier(train_features, train_labels, test_features, test_labels, k, 
         total += targets.size(0)
     return top1 / total * 100, top5 / total * 100
 
-def build_eval_model(arch, patch_size=16, pretrained_weights="", device="cpu"):
-    if arch in BACKBONES:
-        model = BACKBONES.build(dict(type=arch, patch_size=patch_size, num_classes=0))
-    elif hasattr(vits, arch):
-        model = getattr(vits, arch)(patch_size=patch_size, num_classes=0)
-    else:
-        raise ValueError(f"Unknown architecture: {arch}")
-
-    model = model.to(device)
-
-    # Load weights
-    if pretrained_weights and os.path.isfile(pretrained_weights):
-        state_dict = torch.load(pretrained_weights, map_location='cpu', weights_only=False)
-        if 'teacher' in state_dict:
-            state_dict = state_dict['teacher']
-        elif 'student' in state_dict:
-            state_dict = state_dict['student']
-        state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items() if "backbone." in k or not k.startswith("head")}
-        msg = model.load_state_dict(state_dict, strict=False)
-        print(f"Loaded pretrained weights from {pretrained_weights} (matched keys: {len(msg.missing_keys)} missing, {len(msg.unexpected_keys)} unexpected)")
-    else:
-        print(f"WARNING: No pretrained weights provided at {pretrained_weights}, using random initialization!")
-
-    model.eval()
-    return model
-
-def load_data(data_path, dataset_name="image_folder", batch_size=128, num_workers=4):
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
-
-    if dataset_name.lower() == "cifar10":
-        dataset_train = datasets.CIFAR10(root=data_path, train=True, download=True, transform=transform)
-        dataset_val = datasets.CIFAR10(root=data_path, train=False, download=True, transform=transform)
-        num_classes = 10
-    elif dataset_name.lower() == "cifar100":
-        dataset_train = datasets.CIFAR100(root=data_path, train=True, download=True, transform=transform)
-        dataset_val = datasets.CIFAR100(root=data_path, train=False, download=True, transform=transform)
-        num_classes = 100
-    else:
-        train_path = os.path.join(data_path, "train")
-        val_path = os.path.join(data_path, "val")
-        if not os.path.exists(val_path):
-            val_path = os.path.join(data_path, "validation")
-        if not os.path.exists(train_path) or not os.path.exists(val_path):
-            raise FileNotFoundError(f"Cannot find train/val directories under {data_path}")
-        dataset_train = datasets.ImageFolder(train_path, transform=transform)
-        dataset_val = datasets.ImageFolder(val_path, transform=transform)
-        num_classes = len(dataset_train.classes)
-
-    train_loader = DataLoader(dataset_train, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
-    val_loader = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
-    return train_loader, val_loader, num_classes
 
 def main():
     parser = argparse.ArgumentParser()

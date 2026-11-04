@@ -13,7 +13,7 @@ model:
 
 train:
   epochs: 100
-  batch_size_per_gpu: 32 # Tối ưu cho 8GB VRAM
+  batch_size_per_gpu: 32 # Optimized for 8GB VRAM
   gradient_accumulation_steps: 4 # Effective batch size = 128
   lr: 0.0005
   min_lr: 0.00001

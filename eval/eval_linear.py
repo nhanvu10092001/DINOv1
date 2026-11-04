@@ -11,6 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import models
 import models.vision_transformer as vits
 from core.registry import BACKBONES
+from eval.eval_utils import build_eval_model, load_eval_data
 from utils.metrics import AverageMeter
 
 class LinearClassifier(nn.Module):
@@ -92,69 +93,16 @@ def validate(model, linear_classifier, loader, epoch, device):
     print(f'Test Epoch: {epoch} Loss: {losses.avg:.4f} Acc@1: {acc1.avg:.2f}% Acc@5: {acc5.avg:.2f}%')
     return acc1.avg
 
-def build_eval_model(arch, patch_size=16, pretrained_weights="", device="cpu"):
-    if arch in BACKBONES:
-        model = BACKBONES.build(dict(type=arch, patch_size=patch_size, num_classes=0))
-    elif hasattr(vits, arch):
-        model = getattr(vits, arch)(patch_size=patch_size, num_classes=0)
-    else:
-        raise ValueError(f"Unknown architecture: {arch}")
-
-    model = model.to(device)
-
-    if pretrained_weights and os.path.isfile(pretrained_weights):
-        state_dict = torch.load(pretrained_weights, map_location='cpu', weights_only=False)
-        if 'teacher' in state_dict:
-            state_dict = state_dict['teacher']
-        elif 'student' in state_dict:
-            state_dict = state_dict['student']
-        state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items() if "backbone." in k or not k.startswith("head")}
-        msg = model.load_state_dict(state_dict, strict=False)
-        print(f"Loaded pretrained weights from {pretrained_weights} (matched keys: {len(msg.missing_keys)} missing, {len(msg.unexpected_keys)} unexpected)")
-    else:
-        print(f"WARNING: No pretrained weights provided at {pretrained_weights}, using random initialization!")
-
-    model.eval()
-    for param in model.parameters():
-        param.requires_grad = False
-    return model
 
 def load_data(data_path, dataset_name="image_folder", batch_size=256, num_workers=4):
-    transform_train = transforms.Compose([
-        transforms.RandomResizedCrop(224),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
-    transform_val = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
+    return load_eval_data(
+        data_path=data_path,
+        dataset_name=dataset_name,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        for_linear_probing=True,
+    )
 
-    if dataset_name.lower() == "cifar10":
-        dataset_train = datasets.CIFAR10(root=data_path, train=True, download=True, transform=transform_train)
-        dataset_val = datasets.CIFAR10(root=data_path, train=False, download=True, transform=transform_val)
-        num_classes = 10
-    elif dataset_name.lower() == "cifar100":
-        dataset_train = datasets.CIFAR100(root=data_path, train=True, download=True, transform=transform_train)
-        dataset_val = datasets.CIFAR100(root=data_path, train=False, download=True, transform=transform_val)
-        num_classes = 100
-    else:
-        train_path = os.path.join(data_path, "train")
-        val_path = os.path.join(data_path, "val")
-        if not os.path.exists(val_path):
-            val_path = os.path.join(data_path, "validation")
-        if not os.path.exists(train_path) or not os.path.exists(val_path):
-            raise FileNotFoundError(f"Cannot find train/val directories under {data_path}")
-        dataset_train = datasets.ImageFolder(train_path, transform=transform_train)
-        dataset_val = datasets.ImageFolder(val_path, transform=transform_val)
-        num_classes = len(dataset_train.classes)
-
-    train_loader = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
-    val_loader = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
-    return train_loader, val_loader, num_classes
 
 @torch.no_grad()
 def extract_features(model, loader, device):

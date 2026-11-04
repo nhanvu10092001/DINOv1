@@ -43,47 +43,16 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import datasets, transforms
 
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except ModuleNotFoundError:
-    class SummaryWriter:  # type: ignore[no-redef]
-        """Fallback TensorBoard event writer producing valid `events.out.tfevents.*` files."""
-
-        def __init__(self, log_dir: str = "runs") -> None:
-            self.log_dir = log_dir
-            os.makedirs(self.log_dir, exist_ok=True)
-            ts = int(time.time())
-            host = socket.gethostname()
-            self.event_path = os.path.join(self.log_dir, f"events.out.tfevents.{ts}.{host}")
-            self.jsonl_path = os.path.join(self.log_dir, "scalar_events.jsonl")
-            self._fh = open(self.event_path, "ab")
-            self._jfh = open(self.jsonl_path, "a", encoding="utf-8")
-
-        def add_scalar(self, tag: str, scalar_value: float, global_step: int = 0) -> None:
-            val = float(scalar_value)
-            step = int(global_step)
-            wall = time.time()
-            record = json.dumps({"wall_time": wall, "step": step, "tag": tag, "value": val}) + "\n"
-            self._jfh.write(record)
-            payload = record.encode("utf-8")
-            header = struct.pack("<Q", len(payload))
-            self._fh.write(header + b"\x00\x00\x00\x00" + payload + b"\x00\x00\x00\x00")
-
-        def flush(self) -> None:
-            self._fh.flush()
-            self._jfh.flush()
-
-        def close(self) -> None:
-            self.flush()
-            self._fh.close()
-            self._jfh.close()
-
 from core.registry import LOSSES, MODULES, TRANSFORMS
 import dino_datasets  # noqa: F401
 import losses  # noqa: F401
 import models  # noqa: F401
 from losses.dr_grpo_loss import DrGRPOLoss
 from models.grpo_policy_wrapper import DINOGRPOPolicyWrapper
+from utils.logging_utils import get_summary_writer, setup_logger
+from utils.saliency import derive_salience_pseudo_mask
+
+SummaryWriter = get_summary_writer
 
 
 def detect_device(requested_device: Optional[str] = None) -> torch.device:
@@ -111,33 +80,8 @@ def detect_device(requested_device: Optional[str] = None) -> torch.device:
 
 
 def setup_course_logger(log_path: str = "output/logs/grpo_training.log") -> logging.Logger:
-    """Configures structured text file + console logger required by course specification.
-
-    Args:
-        log_path: Destination log file path.
-
-    Returns:
-        Configured `logging.Logger` instance.
-    """
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    logger = logging.getLogger("DINO_DrGRPO")
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
-
-    formatter = logging.Formatter(
-        fmt="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
-
-    return logger
+    """Configures structured text file + console logger required by course specification."""
+    return setup_logger(log_path=log_path, name="DINO_DrGRPO")
 
 
 def resolve_checkpoint_path(pattern_or_path: str) -> str:
@@ -344,93 +288,6 @@ def _unpack_batch(
         labels.to(device, non_blocking=True),
         None,
     )
-
-
-@torch.no_grad()
-def derive_salience_pseudo_mask(
-    images: torch.Tensor,
-    patch_features: Optional[torch.Tensor] = None,
-    grid_size: Tuple[int, int] = (14, 14),
-    target_sparsity: float = 0.35,
-) -> torch.Tensor:
-    """Computes an unsupervised TokenCut spectral + contour salience mask on the patch grid.
-
-    Combines:
-    1. Spectral TokenCut degree centrality from normalized patch token affinities (when
-       `patch_features` is provided).
-    2. Multi-channel spatial Sobel gradient energy (object contours & structure).
-    3. Patch color contrast against border background tokens.
-
-    Args:
-        images: Normalized image tensor of shape (B, 3, H, W).
-        patch_features: Optional patch embeddings of shape (B, N, D).
-        grid_size: Patch grid size (H_g, W_g).
-        target_sparsity: Fraction of foreground patches.
-
-    Returns:
-        Binary foreground target mask of shape (B, H_g * W_g).
-    """
-    B, _, _, _ = images.shape
-    H_g, W_g = grid_size
-    N = H_g * W_g
-
-    # 1. Spatial gradient magnitude (object contours)
-    dx = (images[:, :, :, 1:] - images[:, :, :, :-1]).abs().mean(dim=1, keepdim=True)
-    dy = (images[:, :, 1:, :] - images[:, :, :-1, :]).abs().mean(dim=1, keepdim=True)
-    grad_x = F.adaptive_avg_pool2d(dx, output_size=(H_g, W_g)).squeeze(1)
-    grad_y = F.adaptive_avg_pool2d(dy, output_size=(H_g, W_g)).squeeze(1)
-    edge_energy = (grad_x.pow(2) + grad_y.pow(2)).sqrt()
-    edge_energy = edge_energy / (edge_energy.amax(dim=(-2, -1), keepdim=True) + 1e-6)
-
-    # 2. Color contrast against border background tokens
-    patches = F.adaptive_avg_pool2d(images, output_size=(H_g, W_g))
-    border_tokens = torch.cat([
-        patches[:, :, 0, :],
-        patches[:, :, -1, :],
-        patches[:, :, :, 0],
-        patches[:, :, :, -1],
-    ], dim=-1)
-    border_mean = border_tokens.mean(dim=-1, keepdim=True).unsqueeze(-1)
-    border_std = border_tokens.std(dim=-1, keepdim=True).unsqueeze(-1) + 0.1
-    color_contrast = ((patches - border_mean) / border_std).pow(2).sum(dim=1).sqrt()
-    color_contrast = color_contrast / (color_contrast.amax(dim=(-2, -1), keepdim=True) + 1e-6)
-
-    yy = torch.linspace(-1.0, 1.0, H_g, device=images.device)
-    xx = torch.linspace(-1.0, 1.0, W_g, device=images.device)
-    gy, gx = torch.meshgrid(yy, xx, indexing="ij")
-    vignette = torch.clamp(1.15 - 0.35 * (gx.pow(2) + gy.pow(2)), min=0.4, max=1.0).unsqueeze(0)
-
-    img_salience = ((0.55 * edge_energy + 0.45 * color_contrast) * vignette).view(B, N)
-
-    if patch_features is not None:
-        # Spectral TokenCut centrality: patches with strong affinity to foreground cluster
-        # and low affinity to image border tokens
-        f_norm = F.normalize(patch_features.detach().float(), dim=-1, p=2)  # (B, N, D)
-        f_2d = f_norm.view(B, H_g, W_g, -1)
-        bg_proto = F.normalize(
-            torch.cat([
-                f_2d[:, 0, :, :],
-                f_2d[:, -1, :, :],
-                f_2d[:, :, 0, :],
-                f_2d[:, :, -1, :],
-            ], dim=1).mean(dim=1, keepdim=True),
-            dim=-1,
-            p=2,
-        )  # (B, 1, D)
-        bg_sim = (f_norm * bg_proto).sum(dim=-1)  # (B, N)
-        fg_spectral = 1.0 - torch.clamp(bg_sim, min=0.0, max=1.0)
-        fg_spectral = (fg_spectral - fg_spectral.amin(dim=-1, keepdim=True)) / (
-            fg_spectral.amax(dim=-1, keepdim=True) - fg_spectral.amin(dim=-1, keepdim=True) + 1e-6
-        )
-        salience = 0.55 * fg_spectral + 0.45 * img_salience
-    else:
-        salience = img_salience
-
-    k_fg = max(1, int(round(N * target_sparsity)))
-    topk_idx = torch.topk(salience, k=k_fg, dim=-1).indices
-    mask = torch.zeros((B, N), device=images.device, dtype=torch.float32)
-    mask.scatter_(-1, topk_idx, 1.0)
-    return mask
 
 
 @torch.no_grad()
