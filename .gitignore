@@ -236,6 +236,16 @@ fast_data/
 *.tar.gz
 *.tgz
 
+# LaTeX Build Artifacts
+*.aux
+*.nav
+*.out
+*.snm
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
 # TensorBoard & Training Runtime Logs
 output/tensorboard/
 output/logs/
