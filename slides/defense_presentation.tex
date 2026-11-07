@@ -495,15 +495,15 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
 \end{frame}
 
 % ==============================================================================
-% SLIDE 5: INNOVATION 1 — FREQUENCY-ADAPTIVE 2D RoPE (MATH MADE VISUAL)
+% SLIDE 8: INNOVATION 1 — FREQUENCY-ADAPTIVE 2D RoPE (MATH & GEOMETRY)
 % ==============================================================================
 \begin{frame}{Innovation 1: Frequency-Adaptive 2D RoPE (Math Made Visual)}
-\vspace{-0.5em}
+\vspace{-0.4em}
 \begin{columns}[c]
     % Visual TikZ Diagram of 2D RoPE
-    \begin{column}{0.48\textwidth}
+    \begin{column}{0.45\textwidth}
         \centering
-        \resizebox{0.85\textwidth}{!}{%
+        \resizebox{0.84\textwidth}{!}{%
         \begin{tikzpicture}[font=\sffamily\footnotesize, >=Latex]
             % 2D Grid Coordinate
             \draw[step=0.6cm, gray!30, very thin] (0,0) grid (3.6,3.6);
@@ -511,66 +511,85 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
             \draw[->, thick, black!70] (0,0) -- (0,3.9) node[above, font=\tiny] {$y$};
 
             % Patch coordinate
-            \filldraw[fill=navyblue, draw=black] (1.8, 2.4) circle (3pt) node[above right, font=\scriptsize\bfseries] {$(p_x, p_y)$};
+            \filldraw[fill=navyblue, draw=black] (1.8, 2.4) circle (3pt) node[above right, font=\scriptsize\bfseries] {$(x_i, y_i)$};
 
             % Rotation circle
             \draw[dashed, draw=accentblue, line width=0.8pt] (1.8, 2.4) circle (0.8cm);
-            \draw[->, line width=1.1pt, crimsonred] (1.8, 2.4) -- ++(30:0.8cm) node[above, font=\tiny\bfseries] {$\mathbf{R}(\theta_x)$};
-            \draw[->, line width=1.1pt, darkgreen] (1.8, 2.4) -- ++(120:0.8cm) node[left, font=\tiny\bfseries] {$\mathbf{R}(\theta_y)$};
+            \draw[->, line width=1.1pt, crimsonred] (1.8, 2.4) -- ++(30:0.8cm) node[above, font=\tiny\bfseries] {$\mathbf{R}(\theta_{x,m})$};
+            \draw[->, line width=1.1pt, darkgreen] (1.8, 2.4) -- ++(120:0.8cm) node[left, font=\tiny\bfseries] {$\mathbf{R}(\theta_{y,m})$};
 
             % Frequency Spectrum Ramp
-            \node[font=\scriptsize\bfseries] at (1.8, -0.4) {Frequency Spectrum Blending $\alpha_m$};
+            \node[font=\scriptsize\bfseries] at (1.8, -0.4) {Spectral Interpolation Ramp $\alpha_m = 1 - \frac{m}{M-1}$};
             \shade[left color=darkgreen!80, right color=accentblue!80] (0, -0.9) rectangle (3.6, -0.6);
-            \node[font=\tiny\bfseries, text=white] at (0.6, -0.75) {High ($\alpha_0=1$)};
-            \node[font=\tiny\bfseries, text=white] at (3.0, -0.75) {Low ($\alpha_{M-1}=0$)};
-            \node[font=\tiny, below=0.1cm of {0.6, -0.85}] {Raw Coordinates};
-            \node[font=\tiny, below=0.1cm of {3.0, -0.85}] {Norm Coordinates};
+            \node[font=\tiny\bfseries, text=white] at (0.6, -0.75) {High ($m=0, \alpha_0=1$)};
+            \node[font=\tiny\bfseries, text=white] at (2.95, -0.75) {Low ($\alpha_{M-1}=0$)};
+            \node[font=\tiny, below=0.1cm of {0.6, -0.85}] {Raw Lattice $x_{\text{raw}}$};
+            \node[font=\tiny, below=0.1cm of {2.95, -0.85}] {Norm Grid $x_{\text{norm}}$};
         \end{tikzpicture}%
         }
     \end{column}
 
     % Math & Properties
-    \begin{column}{0.50\textwidth}
-        \begin{block}{\textbf{Rotary Equivariance Inner Product}}
-            \small
-            \vspace{-0.2em}
-            \[ \langle \tilde{\mathbf{q}}_i, \tilde{\mathbf{k}}_j \rangle = \mathbf{q}_i^\top \mathbf{R}_{\Theta}(p_{x,i}-p_{x,j}, \, p_{y,i}-p_{y,j}) \mathbf{k}_j \]
-            \vspace{-0.3em}
-            \scriptsize Relative displacement $(\Delta x, \Delta y)$ is preserved exactly!
+    \begin{column}{0.52\textwidth}
+        \begin{block}{\textbf{Spectral Coordinate Blending ($M=16$ bands/axis)}}
+            \footnotesize
+            \vspace{-0.4em}
+            \[
+                \omega_m = B^{-2m / d_x}, \quad x_m^{\text{adapt}} = \alpha_m x_{\text{raw}} + (1 - \alpha_m) x_{\text{norm}}
+            \]
+            \vspace{-0.6em}
+            \begin{itemize}\setlength{\itemsep}{1pt}
+                \item \textbf{High Freq ($\alpha_0 = 1$)}: Preserves fine-grained patch steps.
+                \item \textbf{Low Freq ($\alpha_{M-1} = 0$)}: Scale-invariant global envelope.
+            \end{itemize}
         \end{block}
 
         \vspace{-0.2em}
-        \begin{exampleblock}{\textbf{Continuous Coordinate Blending}}
-            \small
-            \vspace{-0.2em}
-            \[ p_m = \alpha_m \cdot p_{\text{raw}} + (1 - \alpha_m) \cdot p_{\text{norm}}, \quad \alpha_m = 1 - \frac{m}{M-1} \]
+        \begin{exampleblock}{\textbf{Closed-Form 2D Relative Positional Kernel}}
+            \scriptsize
             \vspace{-0.4em}
-            \begin{itemize}\setlength{\itemsep}{2pt}
-                \item \textbf{High Frequencies}: Preserve sharp local boundaries.
-                \item \textbf{Low Frequencies}: Scale invariance across multi-crop views.
-                \item \textbf{\texttt{[CLS]} Token}: $\boldsymbol{\theta}_{\text{cls}} = \mathbf{0} \implies \mathbf{R}=\mathbf{I}$ (unbiased global view).
-            \end{itemize}
+            \[
+                \langle \mathbf{q}_c^{\text{rot}}, \mathbf{k}_j^{\text{rot}} \rangle = \sum_{m=0}^{M-1} 2\cos\!\big(\Delta x_m^{\text{adapt}}\omega_m\big) + \sum_{m=0}^{M-1} 2\cos\!\big(\Delta y_m^{\text{adapt}}\omega_m\big)
+            \]
+            \vspace{-0.5em}
+            \textbf{\texttt{[CLS]} Token}: $\boldsymbol{\theta}_{\text{cls}} = \mathbf{0} \implies \mathbf{R}=\mathbf{I}$ (unbiased global aggregation).
         \end{exampleblock}
     \end{column}
 \end{columns}
 \end{frame}
 
 % ==============================================================================
-% SLIDE 6: INNOVATION 2 — SPATIAL-SEMANTIC SPARSE ATTENTION
+% SLIDE 9: 2D RoPE EMPIRICAL HARMONICS & RESOLUTION EXTRAPOLATION
 % ==============================================================================
-\begin{frame}{Innovation 2: Spatial-Semantic Sparse Softmax Attention}
-\vspace{-0.2em}
+\begin{frame}{Empirical Verification: 2D RoPE Harmonics \& Extrapolation}
+\vspace{-0.5em}
+\begin{block}{\textbf{1. Frequency Schedule \& Spatial Basis Harmonics ($m=0, 5, 12$)}}
+    \centering
+    \includegraphics[width=0.95\textwidth, height=0.28\textheight, keepaspectratio]{output/fig_rope_harmonics.png}
+\end{block}
+\vspace{-0.6em}
+\begin{exampleblock}{\textbf{2. Relative Positional Decay Kernel under $14\times 14 \to 28\times 28$ Extrapolation}}
+    \centering
+    \includegraphics[width=0.92\textwidth, height=0.29\textheight, keepaspectratio]{output/fig_rope_extrapolation.png}
+\end{exampleblock}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 10: INNOVATION 2 — SPATIAL-SEMANTIC SPARSE ATTENTION (S3)
+% ==============================================================================
+\begin{frame}{Innovation 2: Spatial-Semantic Sparse Attention ($S^3$)}
+\vspace{-0.3em}
 \begin{columns}[c]
-    \begin{column}{0.48\textwidth}
+    \begin{column}{0.45\textwidth}
         \centering
-        \resizebox{0.88\textwidth}{!}{%
+        \resizebox{0.85\textwidth}{!}{%
         \begin{tikzpicture}[
             font=\sffamily\footnotesize,
             box/.style={draw=black!70, rounded corners=3pt, align=center, inner sep=4pt}
         ]
             \node[box, fill=softpurple, draw=borderpurple, text width=5.2cm] (cls) {
                 \textbf{Bidirectional \texttt{[CLS]} Conduit (Index 0)}\\
-                \scriptsize \texttt{[CLS]} attends to all $N$ tokens $\&$ all tokens attend to \texttt{[CLS]}
+                \scriptsize $\mathcal{S}_0 = \{0\dots N_p\}$ $\&$ $0 \in \mathcal{S}_i \;\forall i$
             };
 
             \coordinate (gtop) at ([yshift=-0.32cm]cls.south);
@@ -606,31 +625,59 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
         }
     \end{column}
 
-    \begin{column}{0.50\textwidth}
-        \begin{block}{\textbf{Active Support $\mathcal{S}_i$: Exactly 26 Keys}}
-            \small
-            \begin{itemize}\setlength{\itemsep}{2pt}
-                \item \textcolor{bordergreen}{\textbf{Local Window $\mathcal{N}_{\text{local}}$}}: $3\times 3$ spatial neighborhood ($9$ keys).
-                \item \textcolor{borderorange}{\textbf{Semantic Top-$16$ $\mathcal{N}_{\text{semantic}}$}}: dynamic content routing across distant tokens ($16$ keys).
-                \item \textcolor{borderpurple}{\textbf{Bidirectional \texttt{[CLS]}}}: global context conduit ($1$ key).
-            \end{itemize}
-            \centering \textbf{86.8\% Computation Reduction} ($26 / 197$ keys).
+    \begin{column}{0.52\textwidth}
+        \begin{block}{\textbf{Composite Support Set $\mathcal{S}_i$ ($|\mathcal{S}_i| = 26 / 197$)}}
+            \scriptsize
+            \vspace{-0.4em}
+            \[
+                \mathcal{S}_i = \underbrace{\mathcal{N}_{\text{local}}(i)}_{3\times 3\text{ (9)}} \cup \underbrace{\operatorname{Top-}16_{j \notin \mathcal{N}_{\text{local}}(i)}\!\big(\langle \mathbf{q}_i^{\text{rot}}, \mathbf{k}_j^{\text{rot}}\rangle / \sqrt{d_k}\big)}_{\text{Dynamic Semantic (16)}} \cup \underbrace{\{\text{CLS}\}}_{\text{Global (1)}}
+            \]
+            \vspace{-0.4em}
+            \centering \textbf{86.8\% Key Reduction} ($13.2\%$ active density).
         \end{block}
         
         \vspace{-0.2em}
-        \begin{exampleblock}{\textbf{Exact Softmax Normalization}}
-            \small
+        \begin{exampleblock}{\textbf{Exact Masked Softmax Normalization}}
+            \scriptsize
             \vspace{-0.3em}
-            \[ \mathbf{A}_{ij} = \frac{\exp(\tilde{\mathbf{q}}_i^\top \tilde{\mathbf{k}}_j / \sqrt{d_h})}{\sum_{l \in \mathcal{S}_i} \exp(\tilde{\mathbf{q}}_i^\top \tilde{\mathbf{k}}_l / \sqrt{d_h})}, \quad \sum_{j \in \mathcal{S}_i} \mathbf{A}_{ij} \equiv 1 \]
+            \[
+                A_{ij} = \frac{\exp(\tilde{s}_{ij})}{\sum_{l \in \mathcal{S}_i} \exp(\tilde{s}_{il})}, \quad \tilde{s}_{ij} = -\infty \;\forall j \notin \mathcal{S}_i, \quad \sum_{j \in \mathcal{S}_i} A_{ij} \equiv 1
+            \]
             \vspace{-0.4em}
-            \scriptsize Zero probability leakage $\implies$ perfectly stable gradient backpropagation!
+            Zero probability leakage $\implies$ $4\times$ higher peak foreground density!
         \end{exampleblock}
     \end{column}
 \end{columns}
 \end{frame}
 
 % ==============================================================================
-% SLIDE 7: INNOVATION 3 — VERIFIABLE RLVR VIA DR. GRPO (PIPELINE)
+% SLIDE 11: EMPIRICAL S3 SPARSE ROUTING BREAKDOWN
+% ==============================================================================
+\begin{frame}{Empirical Verification: $S^3$ Sparse Routing on Real Patches}
+\vspace{-0.3em}
+\begin{block}{\textbf{Query Patch $(7,7)$ on Horse (\#24, Head 2): Local $3\times 3$ + Dynamic Top-16 Keys}}
+    \centering
+    \includegraphics[width=\textwidth, height=0.45\textheight, keepaspectratio]{output/fig_s3_routing_decomp.png}
+\end{block}
+\vspace{-0.3em}
+\begin{columns}[t]
+    \begin{column}{0.49\textwidth}
+        \begin{alertblock}{\textbf{Unmasked Dense Softmax}}
+            \scriptsize
+            Spreads probability mass across $197$ keys (peak $\approx 0.0075$), allowing background grass/sky clutter to dilute representations.
+        \end{alertblock}
+    \end{column}
+    \begin{column}{0.49\textwidth}
+        \begin{exampleblock}{\textbf{$S^3$ Sparse Softmax ($|\mathcal{S}_i|=26$)}}
+            \scriptsize
+            Eliminates $86.8\%$ background keys and concentrates probability mass (peak $>0.040$) strictly along the horse's anatomy!
+        \end{exampleblock}
+    \end{column}
+\end{columns}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 12: INNOVATION 3 — VERIFIABLE RLVR VIA DR. GRPO (PIPELINE)
 % ==============================================================================
 \begin{frame}{Innovation 3: Verifiable RLVR via Unbiased Dr.\ GRPO}
 \vspace{-0.3em}
@@ -658,7 +705,7 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
     % Policy Net
     \node[purplebox, minimum width=3.2cm, minimum height=1.3cm, above right=0.25cm and 0.9cm of prefix] (policy) {
         \textbf{Active Policy $\pi_\theta$}\\
-        Blocks $10, 11$ + \texttt{policy\_gate}\\
+        Blocks $10, 11$ + Gate $g_\phi$\\
         {\scriptsize 8.27\% trainable parameters}
     };
 
@@ -679,7 +726,7 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
     % Verifiable Rewards
     \node[orangebox, minimum width=2.8cm, minimum height=1.3cm, right=0.9cm of ref] (rewards) {
         \textbf{3 Verifiable Rewards}\\
-        $R = 0.45 R_{\text{eq}} + 0.35 R_{\text{cut}} + 0.20 R_{\text{spar}}$\\
+        $0.45 R_{\text{eq}} + 0.35 R_{\text{comp}} + 0.20 R_{\text{spar}}$\\
         {\scriptsize 100\% Label-Free (Zero Critic)}
     };
 
@@ -687,7 +734,7 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
     \coordinate (mid) at ($(rollout.east)!0.5!(rewards.east)$);
     \node[redbox, minimum width=3.2cm, minimum height=2.2cm, right=0.9cm of mid] (loss) {
         \textbf{Dr.\ GRPO Objective}\\
-        Unbiased Advantage $A^{(g)}$\\
+        Unbiased Advantage $A_i$\\
         DAPO Asymmetric Clip\\
         Bernoulli KL $\beta_{\text{KL}}=0.04$\\
         Foreground Distillation
@@ -703,91 +750,129 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
 \end{tikzpicture}%
 }
 
-\vspace{0.3em}
+\vspace{0.2em}
+\begin{block}{\textbf{6-Step Patch-Level Bernoulli Policy Construction $\pi_\theta(\mathbf{a}\mid I) = \prod_{p=1}^{196} p_p^{a_p}(1-p_p)^{1-a_p}$}}
+    \vspace{-0.5em}
+    \footnotesize
+    \[
+        \hat{a}_p = \frac{\bar{a}_p - \mu_{\bar{a}}}{\sigma_{\bar{a}} + \epsilon}, \quad b_{\text{sparsity}} = \log\!\left(\frac{0.35}{0.65}\right) \approx -0.619, \quad \ell_p^\theta = 0.55\big(\gamma \hat{a}_p^\theta + b_{\text{sparsity}}\big) + 0.45\big(g_\phi(\mathbf{z}_p) + 1.35\,\hat{s}_p + b_{\text{sparsity}}\big)
+    \]
+\end{block}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 13: EMPIRICAL POLICY CONSTRUCTION PIPELINE
+% ==============================================================================
+\begin{frame}{Step-by-Step Construction of the Bernoulli Patch Policy}
+\vspace{-0.3em}
+\begin{block}{\textbf{Empirical Policy Progression from Raw \texttt{[CLS]} Attention to Refined Active Policy $\pi_\theta$}}
+    \centering
+    \includegraphics[width=\textwidth, height=0.42\textheight, keepaspectratio]{output/fig_policy_construction.png}
+\end{block}
+\vspace{-0.3em}
 \begin{columns}[t]
     \begin{column}{0.49\textwidth}
-        \begin{block}{\textbf{Shared-Prefix Efficiency}}
-            \small
-            Freezing blocks $0\dots 9$ permits training on consumer hardware with \textbf{< 3\,GB VRAM}!
-        \end{block}
+        \begin{alertblock}{\textbf{Frozen Pre-RL Policy $\pi_{\text{ref}}$ (Step 4)}}
+            \scriptsize
+            Exhibits strong background corner/border bias from static self-distillation, contaminating peripheral patches.
+        \end{alertblock}
     \end{column}
-
     \begin{column}{0.49\textwidth}
-        \begin{exampleblock}{\textbf{Zero Neural Critic}}
-            \small
-            Eliminates value model entirely by estimating baselines directly from group rollouts ($G=8$).
+        \begin{exampleblock}{\textbf{Active Policy $\pi_\theta(a_p=1\mid I)$ (Step 6)}}
+            \scriptsize
+            Combining evolved Blocks 10--11 with learned residual gate $g_\phi(\mathbf{z}_p)$ suppresses border artifacts and locks onto the dog!
         \end{exampleblock}
     \end{column}
 \end{columns}
 \end{frame}
 
 % ==============================================================================
-% SLIDE 8: VISUAL ANATOMY OF THE 3 VERIFIABLE REWARDS
+% SLIDE 14: TRI-OBJECTIVE VERIFIABLE REWARDS (MATH + EMPIRICAL DECOMPOSITION)
 % ==============================================================================
-\begin{frame}{Visual Anatomy of the 3 Verifiable Visual Rewards}
-\vspace{-0.3em}
+\begin{frame}{Verifiable Visual Rewards (\texttt{self\_supervised\_v1})}
+\vspace{-0.5em}
 \begin{columns}[t]
-    % Reward 1: Equivariance
     \begin{column}{0.32\textwidth}
         \begin{block}{\textbf{1. Equivariance ($w=0.45$)}}
-            \centering
-            \vspace{0.2em}
-            \begin{tikzpicture}[scale=0.75, every node/.style={transform shape}]
-                \draw[thick, fill=softblue] (0,0) rectangle (1.2,1.2) node[pos=0.5] {$I$};
-                \draw[<->, thick, accentblue] (1.4,0.6) -- node[above, font=\tiny] {Flip $T$} (2.1,0.6);
-                \draw[thick, fill=softblue] (2.3,0.0) rectangle (3.5,1.2) node[pos=0.5] {$T(I)$};
-            \end{tikzpicture}
-            \vspace{0.2em}
-            \footnotesize
-            \textbf{Horizontal-Flip Consistency}:
-            \[ R_{\text{equiv}} = \text{IoU}\big(\mathbf{a}^{(g)}, \, \mathbf{m}_{\text{eq}}\big) \]
-            Blended with unsupervised spectral-contour pseudo-mask.
+            \scriptsize
+            \vspace{-0.5em}
+            \[
+                \mathbf{m}_{\text{eq}} = \operatorname{Top-}69\!\big(T^{-1}(\pi_\theta(T(I)))\big)
+            \]
+            \vspace{-0.8em}
+            \[
+                R_{\text{equiv}} = \frac{\sum_p a_p m_{\text{eq},p}}{\sum_p (a_p + m_{\text{eq},p} - a_p m_{\text{eq},p})}
+            \]
         \end{block}
     \end{column}
 
-    % Reward 2: TokenCut Compactness
     \begin{column}{0.32\textwidth}
-        \begin{block}{\textbf{2. Compactness ($w=0.35$)}}
-            \centering
-            \vspace{0.2em}
-            \begin{tikzpicture}[scale=0.75, every node/.style={transform shape}]
-                \draw[fill=softgreen, draw=darkgreen] (0.6,0.6) circle (0.5cm) node[font=\tiny\bfseries] {FG};
-                \draw[fill=softred, draw=crimsonred] (2.2,0.6) circle (0.5cm) node[font=\tiny\bfseries] {BG};
-                \draw[dashed, thick, crimsonred] (1.4,-0.1) -- (1.4,1.3) node[above, font=\tiny] {Min Cut};
-            \end{tikzpicture}
-            \vspace{0.2em}
-            \footnotesize
-            \textbf{Graph-Spectral TokenCut}:
-            \[ R_{\text{comp}} = 0.65 S_{\text{NCut}} + 0.35(1 - \text{TV}) \]
-            Maximizes intra-object affinity while penalizing boundary fragmentation.
+        \begin{block}{\textbf{2. TokenCut + TV ($w=0.35$)}}
+            \scriptsize
+            \vspace{-0.5em}
+            \[
+                R_{\text{ncut}} = \frac{1}{2}\!\left(\frac{{\mathbf{a}}^\top \mathbf{W} \mathbf{a} - {\mathbf{a}}^\top \mathbf{W}\bar{\mathbf{a}}}{{\mathbf{a}}^\top \mathbf{W}\mathbf{1}} + 1\right)
+            \]
+            \vspace{-0.8em}
+            \[
+                R_{\text{compact}} = 0.65 R_{\text{ncut}} + 0.35 R_{\text{TV}}
+            \]
         \end{block}
     \end{column}
 
-    % Reward 3: Sparsity Prior
-    \begin{column}{0.32\textwidth}
+    \begin{column}{0.31\textwidth}
         \begin{block}{\textbf{3. Sparsity ($w=0.20$)}}
-            \centering
-            \vspace{0.2em}
-            \begin{tikzpicture}[scale=0.75, every node/.style={transform shape}]
-                \draw[->, thick] (0,0) -- (3.0,0) node[right, font=\tiny] {$\rho$};
-                \draw[->, thick] (0,0) -- (0,1.2) node[above, font=\tiny] {$R$};
-                \draw[thick, darkgreen] plot[domain=0.5:2.5, samples=20] (\x, {1.0 - 1.5*(\x-1.5)*(\x-1.5)});
-                \draw[dashed, crimsonred] (1.5,0) -- (1.5,1.0) node[above, font=\tiny] {$\rho=0.35$};
-            \end{tikzpicture}
-            \vspace{0.2em}
-            \footnotesize
-            \textbf{Target Ratio Prior}:
-            \[ R_{\text{spar}} = \max\left(0, 1 - \left|\tfrac{\bar{a} - 0.35}{0.65}\right|^{1.5}\right) \]
-            Strictly prevents trivial all-foreground or empty masks.
+            \scriptsize
+            \vspace{-0.5em}
+            \[
+                \rho_{\text{target}} = 0.35
+            \]
+            \vspace{-0.8em}
+            \[
+                R_{\text{spar}} = \max\!\left(0, 1 - \left|\frac{\bar{a} - 0.35}{0.65}\right|^{1.5}\right)
+            \]
         \end{block}
     \end{column}
 \end{columns}
 
-\vspace{0.3em}
-\begin{exampleblock}{\textbf{100\% Verifiable Scientific Guarantee}}
-    \centering\small
-    Zero neural reward models $\implies$ immune to reward hacking or adversarial policy drift!
+\vspace{-0.4em}
+\begin{exampleblock}{\textbf{Empirical Decomposition across All 4 Verifiable Signal Channels}}
+    \centering
+    \includegraphics[width=0.98\textwidth, height=0.31\textheight, keepaspectratio]{output/fig_reward_decomposition.png}
 \end{exampleblock}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 15: GROUP ROLLOUT SAMPLING & DR. GRPO SURROGATE LOSS
+% ==============================================================================
+\begin{frame}{Group Rollout Sampling ($G=8$) \& Unbiased Dr.\ GRPO Loss}
+\vspace{-0.4em}
+\begin{columns}[c]
+    \begin{column}{0.53\textwidth}
+        \begin{block}{\textbf{Sampled Group Rollouts ($\mathbf{a}^{(1)}\dots\mathbf{a}^{(8)}$)}}
+            \centering
+            \includegraphics[width=\linewidth, height=0.42\textheight, keepaspectratio]{output/fig_group_rollouts.png}
+        \end{block}
+    \end{column}
+
+    \begin{column}{0.45\textwidth}
+        \begin{block}{\textbf{Length-Normalized Ratio \& Advantage}}
+            \scriptsize
+            \vspace{-0.4em}
+            \[
+                A_i^{\text{Dr.GRPO}} = R^{(i)} - \frac{1}{G}\sum_{j=1}^G R^{(j)} \quad (\text{No }\sigma_R\text{ bias!})
+            \]
+            \[
+                \rho_i(\theta) = \exp\!\left(\frac{1}{N}\sum_{p=1}^N \log \frac{\pi_\theta(a_{i,p}\mid I)}{\pi_{\text{old}}(a_{i,p}\mid I)}\right)
+            \]
+        \end{block}
+        \vspace{-0.3em}
+        \begin{exampleblock}{\textbf{DAPO Asymmetric Clip-Higher}}
+            \centering
+            \includegraphics[width=\linewidth, height=0.23\textheight, keepaspectratio]{output/fig_grpo_advantage_clip.png}
+        \end{exampleblock}
+    \end{column}
+\end{columns}
 \end{frame}
 
 % ==============================================================================
@@ -971,18 +1056,45 @@ Evaluated on full CIFAR-10 (50,000 train / 10,000 test images) across both axes:
 \end{frame}
 
 % ==============================================================================
-% SLIDE 13: VISUAL EVIDENCE II: 2x2 QUALITATIVE GRID
+% SLIDE 19: VISUAL EVIDENCE II: CONTIGUOUS MASKS & BORDER LEAKAGE
 % ==============================================================================
-\begin{frame}{Visual Evidence II: Unsupervised Object Discovery Gallery}
-\vspace{-0.3em}
-\centering
-\includegraphics[height=0.62\textheight, keepaspectratio]{output/ablation_2x2_attention_grid.png}
-
-\vspace{-0.2em}
-\begin{exampleblock}{\textbf{Qualitative Proof of Background Noise Suppression}}
-    \centering\footnotesize
-    \textbf{Original Image} $\implies$ \textbf{Vanilla DINO} (Halos) $\implies$ \textbf{Dr.\ DINO-Base} (Sub-parts) $\implies$ \textbf{Vanilla+Dr.GRPO} $\implies$ \textbf{Dr.\ DINO-Full} (Precise Mask)
+\begin{frame}{Visual Evidence II: Contiguous Object Masks \& Border Leakage}
+\vspace{-0.5em}
+\begin{block}{\textbf{Horse (\#5): Border Leakage $73.9\% \to \mathbf{36.4\%}$ $\mid$ FG IoU $51.1\% \to \mathbf{76.9\%}$}}
+    \centering
+    \includegraphics[width=0.96\textwidth, height=0.28\textheight, keepaspectratio]{output/fig_ablation_horse_masks.png}
+\end{block}
+\vspace{-0.6em}
+\begin{exampleblock}{\textbf{Dog (\#4): Border Leakage $97.5\% \to \mathbf{19.2\%}$--$\mathbf{24.9\%}$ $\mid$ FG IoU $39.1\% \to \mathbf{76.1\%}$}}
+    \centering
+    \includegraphics[width=0.96\textwidth, height=0.28\textheight, keepaspectratio]{output/fig_ablation_dog_masks.png}
 \end{exampleblock}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 20: VISUAL EVIDENCE III: PRE-RL VS POST-RL 6-HEAD COMPARISON
+% ==============================================================================
+\begin{frame}{Visual Evidence III: Pre-RL vs.\ Post-RL Multi-Head Alignment}
+\vspace{-0.4em}
+\begin{block}{\textbf{Direct 6-Head \texttt{[CLS]} Comparison on \texttt{ship} (\#27): Stage-1 vs.\ Stage-2 (+Dr.\ GRPO)}}
+    \centering
+    \includegraphics[width=\textwidth, height=0.40\textheight, keepaspectratio]{output/fig_multihead_pre_vs_post_grpo.png}
+\end{block}
+\vspace{-0.4em}
+\begin{columns}[t]
+    \begin{column}{0.49\textwidth}
+        \begin{alertblock}{\textbf{Stage-1 Pre-RL (\texttt{RoPE+Sparse})}}
+            \scriptsize
+            Heads 2, 3, and 5 suffer from perimeter border reflections and ocean background clutter (\textbf{Border Leakage = 97.9\%, FG IoU = 32.9\%}).
+        \end{alertblock}
+    \end{column}
+    \begin{column}{0.49\textwidth}
+        \begin{exampleblock}{\textbf{Stage-2 Post-RL (\texttt{+Dr.\ GRPO})}}
+            \scriptsize
+            All 6 heads purge perimeter noise (\textbf{Border Leakage = 33.4\%}) and lock tightly onto the ship's hull and cabin (\textbf{FG IoU = 71.7\%, +38.8\% jump})!
+        \end{exampleblock}
+    \end{column}
+\end{columns}
 \end{frame}
 
 % ==============================================================================

@@ -418,72 +418,107 @@ The teacher weights track the student via an EMA schedule: $\theta_t \leftarrow 
 \subsection{Frequency-Adaptive 2D Rotary Position Embedding}
 \label{subsec:rope2d}
 
-In 1D RoPE \cite{su2024roformer}, an embedding vector $\mathbf{x} \in \mathbb{R}^d$ at index $p$ is rotated by orthogonal matrix $\mathbf{R}_{\Theta, p}$. For a 2D patch grid of dimensions $H_g \times W_g$, spatial patch positions are parameterized by integer coordinate pairs $(p_y, p_x)$ where $p_y \in [0, H_g-1]$ and $p_x \in [0, W_g-1]$.
-
-\paragraph{Spectral Head Dimension Partitioning:} For an attention head of dimension $d_h$, we partition the channels symmetrically between the horizontal and vertical spatial axes: $d_x = d_y = d_h / 2$. The number of discrete frequency bands per spatial axis is $M = d_x / 2 = d_h / 4$. The base geometric frequencies $\omega_m$ follow:
+In 1D RoPE \cite{su2024roformer}, an embedding vector $\mathbf{x} \in \mathbb{R}^d$ at index $p$ is rotated by orthogonal matrix $\mathbf{R}_{\Theta, p}$. For a 2D patch grid of dimensions $H_g \times W_g$, spatial patch positions are parameterized by integer coordinate pairs $(x_{\text{raw}}, y_{\text{raw}})$ where $x_{\text{raw}} \in \{0, \dots, W_g-1\}$ and $y_{\text{raw}} \in \{0, \dots, H_g-1\}$. To support arbitrary multi-crop resolutions relative to canonical reference grid $S_{\text{ref}} = 14$ ($224\times 224$ global view with $16\times 16$ patches), we also define scale-normalized coordinates:
 \begin{equation}
-\omega_m = b^{-2m / d_x}, \quad m \in \{0, 1, \dots, M-1\},
+x_{\text{norm}} = x_{\text{raw}} \cdot \frac{S_{\text{ref}}}{W_g}, \qquad y_{\text{norm}} = y_{\text{raw}} \cdot \frac{S_{\text{ref}}}{H_g}.
+\label{eq:norm_coords}
+\end{equation}
+
+\paragraph{Spectral Head Dimension Partitioning:} For an attention head of dimension $d_k = 64$, we partition the channels symmetrically between the horizontal ($X$) and vertical ($Y$) spatial axes: $d_x = d_y = d_k / 2 = 32$. Each axis is decomposed into $M = d_x / 2 = d_k / 4 = 16$ complex $2\times 2$ rotation planes with base geometric frequencies $\omega_m$:
+\begin{equation}
+\omega_m = B^{-2m / d_x}, \quad m \in \{0, 1, \dots, M-1\}, \quad B = 10000.0.
 \label{eq:frequencies}
 \end{equation}
-with base $b = 10000.0$.
 
-\paragraph{Frequency-Adaptive Coordinate Blending:} Standard RoPE vision variants either utilize integer coordinates $p_{\text{raw}}$ or scale-normalized coordinates $p_{\text{norm}} = p_{\text{raw}} \cdot (S_{\text{ref}} / S_{\text{grid}})$. We observe that high frequencies encode local textural boundaries whose physical extent depends on raw pixel distances, whereas low frequencies capture global scene geometry that should remain scale-invariant across multi-crop views. We formalize this through a frequency-dependent blending factor $\alpha_m$:
+\paragraph{Frequency-Adaptive Coordinate Blending:} Standard 2D RoPE variants either apply raw coordinates $x_{\text{raw}}$ (which fail under global-to-local crop extrapolation) or normalized coordinates $x_{\text{norm}}$ (which blur fine-grained local lattice steps). We observe that high frequencies ($m \to 0$) encode local textural boundaries whose physical extent depends on discrete patch distances, whereas low frequencies ($m \to M-1$) capture global scene topology that must remain scale-invariant across multi-crop views. We formalize this through a linear spectral interpolation weight $\alpha_m \in [0, 1]$:
 \begin{equation}
-p_m = \alpha_m \cdot p_{\text{raw}} + (1 - \alpha_m) \cdot p_{\text{norm}}, \quad \alpha_m = 1.0 - \frac{m}{M - 1},
+\alpha_m = 1 - \frac{m}{M - 1}, \qquad x_m^{\text{adapt}} = \alpha_m \, x_{\text{raw}} + (1 - \alpha_m) \, x_{\text{norm}}, \qquad y_m^{\text{adapt}} = \alpha_m \, y_{\text{raw}} + (1 - \alpha_m) \, y_{\text{norm}},
 \label{eq:coord_blend}
 \end{equation}
-for $m \in \{0, \dots, M-1\}$. For the highest frequency ($m=0$), $\alpha_0 = 1.0$ (pure raw coordinates). For the lowest frequency ($m=M-1$), $\alpha_{M-1} = 0.0$ (pure normalized coordinates).
+for $m \in \{0, \dots, M-1\}$. At the highest frequency ($m=0$), $\alpha_0 = 1.0$ preserves exact raw patch steps; at the lowest frequency ($m=M-1$), $\alpha_{M-1} = 0.0$ enforces pure scale-normalized coordinates (Figure \ref{fig:rope_harmonics_extrapolation}a).
 
-\paragraph{Rotary Application to Queries and Keys:} The rotation angles along each spatial axis are defined as $\theta_{x, m} = p_{x, m} \omega_m$ and $\theta_{y, m} = p_{y, m} \omega_m$. Each angle is paired into $2\times 2$ block diagonal rotation matrices:
+\paragraph{Rotary Application and Relative 2D Positional Kernel:} With rotation angles $\theta_{x, m} = x_m^{\text{adapt}} \omega_m$ and $\theta_{y, m} = y_m^{\text{adapt}} \omega_m$, each channel pair $(2m, 2m+1)$ undergoes orthogonal $2\times 2$ block rotation:
 \begin{equation}
-\mathbf{R}(\theta) = \begin{pmatrix} \cos \theta & -\sin \theta \\ \sin \theta & \cos \theta \end{pmatrix}.
+\mathbf{R}(\theta) = \begin{pmatrix} \cos \theta & -\sin \theta \\ \sin \theta & \cos \theta \end{pmatrix}, \qquad \mathbf{q}_i^{\text{rot}} = \mathbf{R}_{\Theta}(x_i, y_i) \mathbf{q}_i, \qquad \mathbf{k}_j^{\text{rot}} = \mathbf{R}_{\Theta}(x_j, y_j) \mathbf{k}_j.
 \label{eq:rot_matrix}
 \end{equation}
-The composite block matrix $\mathbf{R}_{\Theta}(p_x, p_y)$ rotates the projected Query $\mathbf{q}_i$ and Key $\mathbf{k}_j$ vectors:
+By orthogonality $\mathbf{R}(\theta_1)^\top \mathbf{R}(\theta_2) = \mathbf{R}(\theta_2 - \theta_1)$, the inner product between rotated query $\mathbf{q}_i^{\text{rot}}$ and key $\mathbf{k}_j^{\text{rot}}$ depends strictly on relative 2D displacement $(\Delta x_m^{\text{adapt}}, \Delta y_m^{\text{adapt}}) = (x_{i,m}^{\text{adapt}} - x_{j,m}^{\text{adapt}}, \, y_{i,m}^{\text{adapt}} - y_{j,m}^{\text{adapt}})$:
 \begin{equation}
-\tilde{\mathbf{q}}_i = \mathbf{R}_{\Theta}(p_{x,i}, p_{y,i}) \mathbf{q}_i, \quad \tilde{\mathbf{k}}_j = \mathbf{R}_{\Theta}(p_{x,j}, p_{y,j}) \mathbf{k}_j.
-\label{eq:rotated_vectors}
-\end{equation}
-Crucially, the resulting dot product preserves relative 2D translation equivariance:
-\begin{equation}
-\langle \tilde{\mathbf{q}}_i, \tilde{\mathbf{k}}_j \rangle = \mathbf{q}_i^\top \mathbf{R}_{\Theta}(p_{x,i} - p_{x,j}, \, p_{y,i} - p_{y,j}) \mathbf{k}_j.
+\langle \mathbf{q}_i^{\text{rot}}, \mathbf{k}_j^{\text{rot}} \rangle = \mathbf{q}_i^\top \mathbf{R}_{\Theta}(\Delta x^{\text{adapt}}, \, \Delta y^{\text{adapt}}) \mathbf{k}_j.
 \label{eq:inner_product_equivariance}
 \end{equation}
+Specifically, for uniform carrier vectors ($\mathbf{q}_c = \mathbf{k}_j = \mathbf{1}$), the exact 2D relative positional decay kernel evaluates to the closed-form harmonic sum:
+\begin{equation}
+\mathcal{K}_{\text{RoPE}}(c, j) = \langle \mathbf{q}_c^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle = \sum_{m=0}^{M-1} 2\cos\!\big(\Delta x_m^{\text{adapt}} \omega_m\big) + \sum_{m=0}^{M-1} 2\cos\!\big(\Delta y_m^{\text{adapt}} \omega_m\big).
+\label{eq:rope_kernel}
+\end{equation}
+As demonstrated in Figure \ref{fig:rope_harmonics_extrapolation}b under $14\times 14 \to 28\times 28$ resolution extrapolation ($4\times$ token count), \texttt{adaptive\_2d} preserves crisp axial cross-hair localization around the center query while maintaining smooth radial distance decay without high-frequency ringing. For the global \texttt{[CLS]} token (index 0), we enforce $\boldsymbol{\theta}_{\text{cls}} = \mathbf{0} \implies \mathbf{R}_{\Theta}(\text{cls}) = \mathbf{I}$ while retaining its learnable 1D class bias, preventing spatial coordinate bias from corrupting global aggregation.
 
-\paragraph{Treatment of the \texttt{[CLS]} Token:} The global classification token \texttt{[CLS]} has no spatial position. To protect its global semantic invariance, we enforce rotation angles $\boldsymbol{\theta}_{\text{cls}} = \mathbf{0}$, yielding $\mathbf{R}_{\Theta}(\text{cls}) = \mathbf{I}$, while retaining its learnable 1D class positional bias. As a result, interactions involving \texttt{[CLS]} remain unrotated.
+% -----------------------------------------------------------------------------
+% FIGURE: 2D ROPE HARMONICS & EXTRAPOLATION KERNEL
+% -----------------------------------------------------------------------------
+\begin{figure*}[t!]
+\centering
+\begin{subfigure}[b]{\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{fig_rope_harmonics.png}
+    \caption{Spectral blending schedule $\alpha_m$ vs.\ angular frequency $\omega_m$, alongside 2D spatial basis harmonics $\cos(x_m^{\text{adapt}}\omega_m)\cos(y_m^{\text{adapt}}\omega_m)$ across High ($m=0, \alpha_0=1.00$), Mid ($m=5, \alpha_5=0.67$), and Low ($m=12, \alpha_{12}=0.20$) frequency bands.}
+    \label{subfig:rope_harmonics}
+\end{subfigure}\\[0.6em]
+\begin{subfigure}[b]{\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{fig_rope_extrapolation.png}
+    \caption{2D relative positional kernel $\mathcal{K}_{\text{RoPE}}(c, j)$ under $14\times 14 \to 28\times 28$ resolution extrapolation comparing \texttt{standard\_2d} ($\alpha_m=1$), \texttt{normalized\_2d} ($\alpha_m=0$), and our \texttt{adaptive\_2d} ($\alpha_m = 1 - \frac{m}{M-1}$).}
+    \label{subfig:rope_extrapolation}
+\end{subfigure}
+\caption{\textbf{Mathematical and Spectral Analysis of Frequency-Adaptive 2D RoPE.} \textbf{(a)} High-frequency bands preserve fine-grained local patch lattice steps while low-frequency bands enforce scale-invariant global envelopes across multi-crop views. \textbf{(b)} Under $28\times 28$ extrapolation, \texttt{adaptive\_2d} balances sharp local peak selectivity with smooth global distance decay.}
+\label{fig:rope_harmonics_extrapolation}
+\end{figure*}
 
-\subsection{Spatial-Semantic Sparse Softmax Attention}
+\subsection{Spatial-Semantic Sparse Softmax Attention (\texorpdfstring{$S^3$}{S3})}
 \label{subsec:sparse_attention}
 
-To eliminate background noise contamination in dense $\mathcal{O}(N^2)$ attention, our Spatial-Semantic Sparse Attention (\texttt{SpatialSemanticAttention}, Figure \ref{fig:drdino_architecture}b--c) restricts each query $i$ to attend only to an active subset $\mathcal{S}_i \subset \{0, \dots, N-1\}$ constructed via three synergistic pathways:
+To eliminate background noise contamination in dense $\mathcal{O}(N^2)$ attention, our Spatial-Semantic Sparse Attention ($S^3$, \texttt{SpatialSemanticAttention}) restricts each spatial query $i \in \{1, \dots, N_p\}$ ($N_p = 196$) to attend strictly to a composite support set $\mathcal{S}_i \subset \{0, \dots, N_p\}$ constructed via three complementary pathways:
+\begin{equation}
+\mathcal{S}_i = \mathcal{N}_{\text{local}}(i) \;\cup\; \mathcal{N}_{\text{semantic}}(i) \;\cup\; \{\text{CLS}\},
+\label{eq:s3_support_union}
+\end{equation}
+where each component serves a distinct structural role:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Local Chebyshev Window ($\mathcal{N}_{\text{local}}(i)$):} For patch $i$ at 2D grid coordinates $(r_i, c_i)$, its local receptive field contains patches within radius $R = \lfloor K_{\text{local}} / 2 \rfloor$:
+    \item \textbf{Local Chebyshev Window ($\mathcal{N}_{\text{local}}(i)$):} For query patch $i$ at 2D grid coordinates $(r_i, c_i)$, its local receptive field includes all spatial patches within Chebyshev ($L_\infty$) radius $R = \lfloor K_{\text{local}} / 2 \rfloor = 1$:
     \begin{equation}
-    \mathcal{N}_{\text{local}}(i) = \{j \mid |r_i - r_j| \le R \;\land\; |c_i - c_j| \le R\}.
+    \mathcal{N}_{\text{local}}(i) = \big\{j \in \{1, \dots, N_p\} \;\big|\; \max(|r_i - r_j|, \, |c_i - c_j|) \le 1\big\}, \qquad |\mathcal{N}_{\text{local}}(i)| \le 9.
     \label{eq:chebyshev_window}
     \end{equation}
-    With $K_{\text{local}} = 3$, this connects patch $i$ to its 8-neighborhood plus itself ($3\times 3 = 9$ spatial tokens).
-    \item \textbf{Dynamic Semantic Top-$K$ ($\mathcal{N}_{\text{semantic}}(i)$):} To capture long-range semantic correlations, we compute dot products $\text{sim}(i, j) = (\tilde{\mathbf{q}}_i^\top \tilde{\mathbf{k}}_j) / \sqrt{d_h}$ across non-local candidates $\mathcal{C}_i = \{j \mid j \notin \mathcal{N}_{\text{local}}(i), j \neq 0\}$, and select the $K_{\text{semantic}} = 16$ highest-scoring tokens:
+    \item \textbf{Dynamic Semantic Top-$K$ Routing ($\mathcal{N}_{\text{semantic}}(i)$):} To capture long-range semantic correlations across separated object parts (e.g., head to hooves, cockpit to tailfin), we evaluate scaled dot-product logits $s_{ij} = \langle \mathbf{q}_i^{\text{rot}}, \mathbf{k}_j^{\text{rot}} \rangle / \sqrt{d_k}$ over non-local candidates $\mathcal{C}_i = \{1, \dots, N_p\} \setminus \mathcal{N}_{\text{local}}(i)$ and select the $K_{\text{semantic}} = 16$ highest-scoring tokens per head:
     \begin{equation}
-    \mathcal{N}_{\text{semantic}}(i) = \argmax_{j \in \mathcal{C}_i}^{(K_{\text{semantic}})} \{\text{sim}(i, j)\}.
+    \mathcal{N}_{\text{semantic}}(i) = \operatorname{Top-}16_{j \in \mathcal{C}_i}\!\left(\frac{\langle \mathbf{q}_i^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle}{\sqrt{d_k}}\right), \qquad |\mathcal{N}_{\text{semantic}}(i)| = 16.
     \label{eq:topk_selection}
     \end{equation}
-    \item \textbf{Bidirectional \texttt{[CLS]} Routing:} The \texttt{[CLS]} token (index 0) provides global cross-patch aggregation:
-    \begin{equation}
-    \mathcal{S}_0 = \{0, 1, \dots, N-1\}, \quad 0 \in \mathcal{S}_i \quad \forall i.
-    \label{eq:cls_bridge}
-    \end{equation}
+    \item \textbf{Bidirectional \texttt{[CLS]} Conduit:} The global \texttt{[CLS]} token (index 0) attends to all tokens ($\mathcal{S}_0 = \{0, 1, \dots, N_p\}$), while every spatial patch includes \texttt{[CLS]} in its support ($0 \in \mathcal{S}_i \;\forall i$).
 \end{enumerate}
 
-The complete active key support is $\mathcal{S}_i = \mathcal{N}_{\text{local}}(i) \cup \mathcal{N}_{\text{semantic}}(i) \cup \{0\}$. Rather than approximating attention, we enforce exact Softmax probability normalization over $\mathcal{S}_i$:
+Rather than post-hoc thresholding, we apply \textbf{exact Softmax normalization} by masking non-support logits to $-\infty$ prior to exponentiation:
 \begin{equation}
-\mathbf{A}_{ij} = \begin{cases}
-\dfrac{\exp\left(\tilde{\mathbf{q}}_i^\top \tilde{\mathbf{k}}_j / \sqrt{d_h}\right)}{\sum_{l \in \mathcal{S}_i} \exp\left(\tilde{\mathbf{q}}_i^\top \tilde{\mathbf{k}}_l / \sqrt{d_h}\right)}, & j \in \mathcal{S}_i, \\
-0, & j \notin \mathcal{S}_i.
+\tilde{s}_{ij} = \begin{cases}
+\dfrac{\langle \mathbf{q}_i^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle}{\sqrt{d_k}}, & \text{if } j \in \mathcal{S}_i, \\[8pt]
+-\infty, & \text{if } j \notin \mathcal{S}_i,
 \end{cases}
+\qquad
+A_{ij} = \frac{\exp(\tilde{s}_{ij})}{\sum_{l \in \mathcal{S}_i} \exp(\tilde{s}_{il})}, \qquad \sum_{j \in \mathcal{S}_i} A_{ij} = 1.
 \label{eq:exact_sparse_softmax}
 \end{equation}
-The output vector is computed as $\mathbf{O}_i = \sum_{j \in \mathcal{S}_i} \mathbf{A}_{ij} \mathbf{v}_j$. Because $\sum_{j \in \mathcal{S}_i} \mathbf{A}_{ij} = 1$ strictly, the attention weights remain numerically stable without probability leakage, reducing active attention pairs from $197 \times 197 = 38,809$ to $196 \times 26 + 197 = 5,293$ (an \textbf{86.36\%} reduction across all queries and \textbf{86.8\%} per patch query).
+For any interior patch, $|\mathcal{S}_i| = 9 + 16 + 1 = \mathbf{26}$ active keys out of $197$ (\textbf{13.2\%} density), eliminating \textbf{86.8\%} of background key interactions per query and concentrating probability mass strictly on semantically coherent foreground structures (Figure \ref{fig:s3_empirical_decomp}).
+
+% -----------------------------------------------------------------------------
+% FIGURE: EMPIRICAL S3 SPARSE ATTENTION DECOMPOSITION
+% -----------------------------------------------------------------------------
+\begin{figure*}[t!]
+\centering
+\includegraphics[width=\textwidth]{fig_s3_routing_decomp.png}
+\caption{\textbf{Empirical Decomposition of Spatial-Semantic Sparse Attention ($S^3$) on a CIFAR-10 Horse Sample (Query Patch $(7,7)$, Head 2).} From left to right: (1) Input image showing the Red query patch, Green $3\times 3$ local Chebyshev window ($9$ keys), and Orange dynamic Top-$16$ semantic keys jumping across the horse's anatomy; (2) Active support set $\mathcal{S}_i$ ($26 / 197$ keys, $13.2\%$ active); (3) Unmasked dense Softmax exhibiting diffuse background tail noise; (4) $S^3$ Sparse Softmax concentrating probability mass ($4\times$ higher peak density) strictly on the horse contour; and (5) Full $197\times 197$ binary routing mask showing the tri-diagonal local bands, dynamic semantic off-diagonals, and bidirectional \texttt{[CLS]} border (index 0).}
+\label{fig:s3_empirical_decomp}
+\end{figure*}
 
 % -----------------------------------------------------------------------------
 % FIGURE 3: VERIFIABLE DR. GRPO RLVR PIPELINE (TIKZ)
@@ -574,66 +609,119 @@ The output vector is computed as $\mathbf{O}_i = \sum_{j \in \mathcal{S}_i} \mat
 
 While global distillation aligns view semantics, it lacks an explicit patch-level objective to suppress residual background activations. To overcome this without human labels or neural reward models, we formulate foreground patch selection as a Reinforcement Learning with Verifiable Rewards (RLVR) problem via Unbiased Group Relative Policy Optimization (Dr.\ GRPO) \cite{shao2024deepseekmath, liu2025drgrpo} (Figure \ref{fig:drdino_grpo_pipeline}).
 
-\paragraph{1. Shared-Prefix Policy Wrapper (\texttt{DINOGRPOPolicyWrapper}):}
-For a ViT backbone of depth $L=12$ and $N=196$ spatial patches, we freeze the patch embedding and the first 10 Transformer blocks, unlocking only the final 2 blocks ($\texttt{blocks[10..11]}$), the final LayerNorm, and a lightweight residual gating MLP $\texttt{policy\_gate}: \mathbb{R}^d \to \mathbb{R}$ ($\text{LN}(384) \to \text{Linear}(384, 96) \to \text{GELU} \to \text{Linear}(96, 1)$). The frozen pretrained checkpoint serves as anchor $\pi_{\text{ref}}$. Because blocks $0\dots 9$ are identical between $\pi_\theta$ and $\pi_{\text{ref}}$, prefix activations are computed once under \texttt{torch.no\_grad()}, restricting trainable parameters to \textbf{8.27\%} ($3.59\text{M} / 43.37\text{M}$) and keeping peak VRAM below 3\,GB.
+\paragraph{1. Shared-Prefix Policy Wrapper \& 6-Step Bernoulli Policy Construction:}
+For a ViT backbone (\texttt{DINOGRPOPolicyWrapper}) of depth $L=12$ and $N=196$ spatial patches, we freeze the patch embedding and the first 10 Transformer blocks, unlocking only the final 2 blocks ($\texttt{blocks[10..11]}$), the final LayerNorm, and a lightweight residual gating MLP $g_\phi: \mathbb{R}^d \to \mathbb{R}$ ($\text{LN}(384) \to \text{Linear}(384, 96) \to \text{GELU} \to \text{Linear}(96, 1)$). The frozen pretrained checkpoint serves as reference anchor $\pi_{\text{ref}}$. Because blocks $0\dots 9$ are identical between $\pi_\theta$ and $\pi_{\text{ref}}$, prefix activations are computed once under \texttt{torch.no\_grad()}, restricting trainable parameters to \textbf{8.27\%} ($3.59\text{M} / 43.37\text{M}$) and keeping peak VRAM below 3\,GB.
 
-Let $\bar{\mathbf{a}} \in \mathbb{R}^N$ denote the head-averaged self-attention from \texttt{[CLS]} to all spatial patches in layer 12 ($\bar{a}_p = \frac{1}{H}\sum_{h=1}^H \mathbf{A}_{0, p}^{(h)}$), and let $\mathbf{x}_p \in \mathbb{R}^d$ be the patch embedding. We standardize $\bar{\mathbf{a}}$ per image ($z_p = (\bar{a}_p - \mu_{\bar{a}}) / (\sigma_{\bar{a}} + \epsilon)$) and define the independent Bernoulli policy $\pi_{\theta, p} = \pi_\theta(a_p = 1 \mid I)$ for patch $p \in \{1, \dots, N\}$ as:
-\begin{align}
-\pi_{\theta, p} &= \sigma\left(s_{\text{attn}} z_p + b_{\text{spar}} + g_\phi(\mathbf{x}_p)\right), \label{eq:policy_prob} \\
-\pi_{\text{ref}, p} &= \sigma\left(s_{\text{attn}} z_p^{\text{ref}} + b_{\text{spar}}\right), \label{eq:ref_prob}
-\end{align}
-where $\sigma(\cdot)$ is the logistic sigmoid, $s_{\text{attn}} = 1.6$, $b_{\text{spar}} = \log(\rho_{\text{target}} / (1 - \rho_{\text{target}}))$ provides an initial prior matching target sparsity $\rho_{\text{target}} = 0.35$, and $g_\phi(\mathbf{x}_p)$ is the residual logit from \texttt{policy\_gate} (initialized to zero).
+To map deterministic self-attention into a sampleable multi-variate Bernoulli policy $\pi_\theta(\mathbf{a} \mid I) = \prod_{p=1}^N p_p^{a_p}(1 - p_p)^{1 - a_p}$ over binary foreground masks $\mathbf{a} \in \{0, 1\}^N$, we execute a principled 6-step pipeline (Figure \ref{fig:policy_construction_steps}):
+\begin{enumerate}[leftmargin=*,label=(\roman*)]
+    \item \textbf{Head-Averaged \texttt{[CLS]} Attention:} Extract last-layer attention from \texttt{[CLS]} to patch $p$: $\bar{a}_p = \frac{1}{H}\sum_{h=1}^H A^{(L)}_{h, \text{CLS}, p}$.
+    \item \textbf{Per-Image Spatial Z-Score Standardization:} Normalize across the $N=196$ patches so policy logits remain invariant to entropy scaling:
+    \begin{equation}
+    \hat{a}_p = \frac{\bar{a}_p - \mu_{\bar{a}}}{\sigma_{\bar{a}} + \epsilon}, \qquad \mu_{\bar{a}} = \frac{1}{N}\sum_{q=1}^N \bar{a}_q, \qquad \sigma_{\bar{a}} = \sqrt{\frac{1}{N}\sum_{q=1}^N (\bar{a}_q - \mu_{\bar{a}})^2}.
+    \label{eq:zscore_attn}
+    \end{equation}
+    \item \textbf{Sparsity Prior Bias:} Center initial foreground activation around target sparsity $\rho_{\text{target}} = 0.35$ via log-odds bias:
+    \begin{equation}
+    b_{\text{sparsity}} = \log\!\left(\frac{\rho_{\text{target}}}{1 - \rho_{\text{target}}}\right) = \log\!\left(\frac{0.35}{0.65}\right) \approx -0.619.
+    \label{eq:sparsity_bias}
+    \end{equation}
+    \item \textbf{Reference vs.\ Active Policy Logits:} While the frozen reference policy uses attention logits $\ell_p^{\text{ref}} = \gamma \hat{a}_p^{\text{ref}} + b_{\text{sparsity}}$ ($\gamma = 1.6$), the active policy $\pi_\theta$ fuses evolved self-attention with the residual MLP gate $g_\phi(\mathbf{z}_p)$ and standardized TokenCut spectral diffusion prior $\hat{s}_p$:
+    \begin{equation}
+    \ell_p^\theta = 0.55\big(\gamma \hat{a}_p^\theta + b_{\text{sparsity}}\big) + 0.45\big(g_\phi(\mathbf{z}_p) + 1.35\,\hat{s}_p + b_{\text{sparsity}}\big), \qquad p_p^\theta = \sigma(\ell_p^\theta), \qquad p_p^{\text{ref}} = \sigma(\ell_p^{\text{ref}}).
+    \label{eq:policy_prob}
+    \end{equation}
+    During rollout exploration, behavior probabilities mix active and reference anchors ($p_p^{\text{explore}} = 0.55\,p_p^\theta + 0.45\,p_p^{\text{ref}}$) to ensure rich sample diversity across the group.
+\end{enumerate}
 
-\paragraph{2. Group Rollouts and Tri-Objective Verifiable Rewards:}
-For each training image $I$, behavior policy $\pi_{\theta_{\text{old}}}$ samples a group of $G=8$ binary masks $\{\mathbf{a}^{(1)}, \dots, \mathbf{a}^{(G)}\}$ where $\mathbf{a}^{(g)} \in \{0, 1\}^N$ and $a_p^{(g)} \sim \text{Bernoulli}(\pi_{\theta_{\text{old}}, p})$. Each rollout $\mathbf{a}^{(g)}$ receives a deterministic verifiable reward $R(\mathbf{a}^{(g)}, I) \in [0, 1]$:
+% -----------------------------------------------------------------------------
+% FIGURE: 6-STEP BERNOULLI POLICY CONSTRUCTION
+% -----------------------------------------------------------------------------
+\begin{figure*}[t!]
+\centering
+\includegraphics[width=\textwidth]{fig_policy_construction.png}
+\caption{\textbf{Step-by-Step Mathematical Construction of the Patch-Level Bernoulli Policy $\pi_\theta(\mathbf{a}\mid I)$ on a CIFAR-10 Dog Sample (\#4).} From left to right: (1) Input image $I$; (2) Raw head-averaged \texttt{[CLS]} attention $\bar{a}_p$; (3) Spatial Z-score standardization $\hat{a}_p$; (4) Frozen pre-RL reference policy $\pi_{\text{ref}}$ showing severe corner/border background leakage; (5) Learned residual foreground gate logits $g_\phi(\mathbf{z}_p)$; and (6) Refined active Bernoulli policy $\pi_\theta(a_p=1\mid I)$ cleanly isolating the dog's silhouette.}
+\label{fig:policy_construction_steps}
+\end{figure*}
+
+\paragraph{2. Group Rollouts and Tri-Objective Verifiable Rewards (\texttt{self\_supervised\_v1}):}
+For each training image $I$, behavior policy $\pi_{\theta_{\text{old}}}$ samples a group of $G=8$ binary masks $\{\mathbf{a}^{(1)}, \dots, \mathbf{a}^{(G)}\}$ where $\mathbf{a}^{(g)} \in \{0, 1\}^N$ and $a_p^{(g)} \sim \text{Bernoulli}(p_p^{\text{explore}})$ (Figure \ref{fig:group_rollouts_and_rewards}a). Each rollout $\mathbf{a}^{(g)}$ is scored by a 100\% label-free, deterministic verifiable reward $R(\mathbf{a}^{(g)}, I) \in [0, 1]$ (Figure \ref{fig:reward_decomposition_panels}):
 \begin{equation}
-R(\mathbf{a}^{(g)}, I) = w_{\text{eq}} R_{\text{equiv}} + w_{\text{comp}} R_{\text{compact}} + w_{\text{spar}} R_{\text{spar}},
+R(\mathbf{a}^{(g)}, I) = w_{\text{eq}} R_{\text{equiv}}(\mathbf{a}^{(g)}, I) + w_{\text{comp}} R_{\text{compact}}(\mathbf{a}^{(g)}, I) + w_{\text{spar}} R_{\text{sparsity}}(\mathbf{a}^{(g)}),
 \label{eq:composite_reward}
 \end{equation}
 with $w_{\text{eq}} = 0.45$, $w_{\text{comp}} = 0.35$, and $w_{\text{spar}} = 0.20$:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Geometric Equivariance \& Salience IoU ($R_{\text{equiv}}$):} Genuine foreground masks transform equivariantly under horizontal reflection $T$. We feed flipped image $T(I)$ through the backbone, un-flip its prediction $T^{-1}(\pi_\theta(T(I)))$, and blend it equally ($0.50 : 0.50$) with an unsupervised spectral-contour salience pseudo-mask $\mathbf{m}_{\text{sal}}$ (derived from Sobel edge energy and border color contrast). Binarizing the top $\lfloor \rho_{\text{target}} N \rfloor$ patches yields target $\mathbf{m}_{\text{eq}}$, and we compute Intersection-over-Union:
+    \item \textbf{Geometric Equivariance \& Salience IoU ($R_{\text{equiv}}, w_{\text{eq}}=0.45$):} True physical objects transform equivariantly under horizontal reflection $T$. Passing flipped view $T(I)$ through the policy and inverting the flip yields $T^{-1}(\pi_\theta(T(I)))$, which is blended ($0.50 : 0.50$) with an unsupervised spectral-contour salience anchor and thresholded at the top $k_{\text{fg}} = \lfloor \rho_{\text{target}} N \rfloor = 69$ patches to form binary target $\mathbf{m}_{\text{eq}} = \operatorname{Top-}k_{\text{fg}}\!\big(T^{-1}(\pi_\theta(T(I)))\big) \in \{0, 1\}^N$. The reward is the exact binary Intersection-over-Union:
     \begin{equation}
     R_{\text{equiv}}(\mathbf{a}^{(g)}, I) = \frac{\sum_{p=1}^N a_p^{(g)} m_{\text{eq}, p}}{\sum_{p=1}^N \left(a_p^{(g)} + m_{\text{eq}, p} - a_p^{(g)} m_{\text{eq}, p}\right) + \epsilon}.
     \label{eq:equiv_reward}
     \end{equation}
-    \item \textbf{TokenCut Normalized Cut \& TV Compactness ($R_{\text{compact}}$):} Following TokenCut \cite{wang2022tokencut}, we build non-negative cosine affinity matrix $\mathbf{W}_{pq} = \max(0, \hat{\mathbf{x}}_p^\top \hat{\mathbf{x}}_q)$ where $\hat{\mathbf{x}}_p = \mathbf{x}_p / \|\mathbf{x}_p\|_2$. We evaluate Normalized Cut alongside 2D Total Variation ($\text{TV}_H, \text{TV}_W$):
+    \item \textbf{TokenCut Spectral Association \& 2D Total Variation Smoothness ($R_{\text{compact}}, w_{\text{comp}}=0.35$):} Following TokenCut \cite{wang2022tokencut}, we construct the non-negative cosine affinity matrix $W_{pq} = \max(0, \hat{\mathbf{z}}_p^\top \hat{\mathbf{z}}_q)$ over $\ell_2$-normalized patch features $\hat{\mathbf{z}}_p = \mathbf{z}_p / \|\mathbf{z}_p\|_2$, and combine spectral Normalized Cut association ($R_{\text{ncut}}$) with 2D spatial Total Variation smoothness ($R_{\text{TV}}$) on the $14\times 14$ reshaped mask $\mathbf{a}_{2\text{D}}^{(g)}$:
     \begin{align}
-    S_{\text{NCut}}(\mathbf{a}^{(g)}) &= \frac{1}{2}\left(\frac{{\mathbf{a}^{(g)}}^\top \mathbf{W} \mathbf{a}^{(g)} - {\mathbf{a}^{(g)}}^\top \mathbf{W} (\mathbf{1} - \mathbf{a}^{(g)})}{{\mathbf{a}^{(g)}}^\top \mathbf{W} \mathbf{1} + \epsilon} + 1\right), \label{eq:ncut} \\
-    R_{\text{compact}}(\mathbf{a}^{(g)}) &= 0.65\,S_{\text{NCut}}(\mathbf{a}^{(g)}) + 0.35\left(1 - \tfrac{1}{2}(\text{TV}_H + \text{TV}_W)\right). \label{eq:compactness}
+    R_{\text{ncut}}(\mathbf{a}^{(g)}) &= \frac{1}{2}\!\left(\frac{{\mathbf{a}^{(g)}}^\top \mathbf{W} \mathbf{a}^{(g)} - {\mathbf{a}^{(g)}}^\top \mathbf{W} (\mathbf{1} - \mathbf{a}^{(g)})}{{\mathbf{a}^{(g)}}^\top \mathbf{W} \mathbf{1} + \epsilon} + 1\right) \in [0, 1], \label{eq:ncut} \\
+    R_{\text{TV}}(\mathbf{a}^{(g)}) &= 1 - \frac{1}{2}\Big(\big\|\nabla_H \mathbf{a}_{2\text{D}}^{(g)}\big\|_1 + \big\|\nabla_W \mathbf{a}_{2\text{D}}^{(g)}\big\|_1\Big), \label{eq:tv_smooth} \\
+    R_{\text{compact}}(\mathbf{a}^{(g)}) &= 0.65\,R_{\text{ncut}}(\mathbf{a}^{(g)}) + 0.35\,R_{\text{TV}}(\mathbf{a}^{(g)}). \label{eq:compactness}
     \end{align}
-    \item \textbf{Target Sparsity Ratio Prior ($R_{\text{spar}}$):} To prevent trivial all-ones or empty masks, we penalize deviations of active patch ratio $\bar{a}^{(g)} = \frac{1}{N}\sum_p a_p^{(g)}$ from $\rho_{\text{target}} = 0.35$:
+    \item \textbf{Target Sparsity Ratio Prior ($R_{\text{sparsity}}, w_{\text{spar}}=0.20$):} To prevent degenerate all-ones ($\bar{a}=1$) or empty ($\bar{a}=0$) masks, we penalize deviations of the active ratio $\bar{a}^{(g)} = \frac{1}{N}\sum_{p=1}^N a_p^{(g)}$ from $\rho_{\text{target}} = 0.35$:
     \begin{equation}
-    R_{\text{spar}}(\mathbf{a}^{(g)}) = \max\left(0, \; 1 - \left(\frac{|\bar{a}^{(g)} - \rho_{\text{target}}|}{\max(\rho_{\text{target}}, 1 - \rho_{\text{target}})}\right)^{1.5}\right).
+    R_{\text{sparsity}}(\mathbf{a}^{(g)}) = \max\!\left(0, \; 1 - \left|\frac{\bar{a}^{(g)} - \rho_{\text{target}}}{\max(\rho_{\text{target}}, 1 - \rho_{\text{target}})}\right|^{1.5}\right).
     \label{eq:sparsity_reward}
     \end{equation}
 \end{enumerate}
 
-\paragraph{3. Unbiased Advantage and Asymmetric Policy Loss:}
-Following Dr.\ GRPO \cite{liu2025drgrpo}, we compute an unbiased mean-centered advantage without dividing by standard deviation (which destabilizes gradients on low-variance groups):
+% -----------------------------------------------------------------------------
+% FIGURE: 4-PANEL REWARD DECOMPOSITION
+% -----------------------------------------------------------------------------
+\begin{figure*}[t!]
+\centering
+\includegraphics[width=\textwidth]{fig_reward_decomposition.png}
+\caption{\textbf{Empirical Decomposition of the Three Verifiable Self-Supervised Reward Components (\texttt{self\_supervised\_v1}).} (1) Horizontal-flip equivariance target anchor $\mathbf{m}_{\text{eq}} = \operatorname{Top-}69(T^{-1}(\pi_\theta(T(I))))$; (2) Sorted $196\times 196$ TokenCut cosine affinity matrix $\mathbf{W}$ revealing the dense $69\times 69$ foreground cluster block in the upper-left quadrant; (3) 2D spatial Total Variation gradient map $\nabla_{H,W}\mathbf{a}$ penalizing isolated background speckles; and (4) Target sparsity reward curve peaking sharply at $\rho_{\text{target}} = 35\%$.}
+\label{fig:reward_decomposition_panels}
+\end{figure*}
+
+\paragraph{3. Unbiased Dr.\ GRPO Advantage and Length-Normalized Asymmetric Surrogate Loss:}
+Standard GRPO \cite{shao2024deepseekmath} normalizes group rewards by standard deviation $\sigma_R$, which causes gradient explosion when rollout variance $\sigma_R \to 0$ on converged images. Following Dr.\ GRPO \cite{liu2025drgrpo}, we compute an \textbf{unbiased mean-centered advantage} (Figure \ref{fig:group_rollouts_and_rewards}b):
 \begin{equation}
-A^{(g)} = R(\mathbf{a}^{(g)}, I) - \frac{1}{G}\sum_{j=1}^G R(\mathbf{a}^{(j)}, I).
+A_i^{\text{Dr.GRPO}} = R^{(i)} - \frac{1}{G}\sum_{j=1}^G R^{(j)}, \qquad i \in \{1, \dots, G\}.
 \label{eq:unbiased_advantage}
 \end{equation}
-We define the sequence-length normalized log-probability augmented with differentiable gated-\texttt{[CLS]} cosine alignment $\mathcal{C}_{\text{align}}$:
+Furthermore, summing log-probabilities over $N=196$ patches causes exponential numerical underflow/overflow in importance sampling ratios. We therefore define the \textbf{length-normalized importance ratio} $\rho_i(\theta)$ across the $N$ binary patch actions (augmented with differentiable gated-\texttt{[CLS]} cosine alignment $\mathcal{C}_{\text{align}}$):
 \begin{equation}
-\log \tilde{\pi}_\theta(\mathbf{a}^{(g)} \mid I) = \frac{1}{N}\sum_{p=1}^N \left[a_p^{(g)}\log \pi_{\theta, p} + (1 - a_p^{(g)})\log(1 - \pi_{\theta, p})\right] + 0.1\,\mathcal{C}_{\text{align}}(\mathbf{f}_{\text{cls}}, \mathbf{a}^{(g)}),
+\rho_i(\theta) = \exp\!\left(\frac{1}{N}\sum_{p=1}^N \log \frac{\pi_\theta(a_{i,p} \mid I)}{\pi_{\theta_{\text{old}}}(a_{i,p} \mid I)} + 0.1\,\Delta \mathcal{C}_{\text{align}}\big(\mathbf{f}_{\text{cls}}, \mathbf{a}^{(i)}\big)\right).
 \label{eq:length_norm_logprob}
 \end{equation}
-where $\mathcal{C}_{\text{align}}(\mathbf{f}_{\text{cls}}, \mathbf{a}^{(g)}) = \langle \hat{\mathbf{f}}_{\text{cls}}, \hat{\mathbf{f}}_{\text{fg}}^{(g)} \rangle + 0.5\langle \hat{\mathbf{f}}_{\text{cls}}, \hat{\mathbf{f}}_{\text{cls}}^{\text{ref}} \rangle$ and $\mathbf{f}_{\text{fg}}^{(g)} = \sum_p a_p^{(g)} \mathbf{x}_p / \sum_p a_p^{(g)}$. 
-
-With probability ratio $\rho^{(g)} = \exp(\log \tilde{\pi}_\theta(\mathbf{a}^{(g)} \mid I) - \log \pi_{\theta_{\text{old}}}(\mathbf{a}^{(g)} \mid I))$, the policy loss applies DAPO asymmetric clipping \cite{yu2025dapo} ($\epsilon_{\text{low}} = 0.20, \epsilon_{\text{high}} = 0.28$) and exact analytical Bernoulli KL divergence ($\beta_{\text{KL}} = 0.04$):
-\begin{equation}
-\mathcal{L}_{\text{Dr.GRPO}} = -\frac{1}{G}\sum_{g=1}^G \min\Big(\rho^{(g)} A^{(g)}, \; \operatorname{clip}(\rho^{(g)}, 1-\epsilon_{\text{low}}, 1+\epsilon_{\text{high}}) A^{(g)}\Big) + \beta_{\text{KL}}\,\mathbb{D}_{\text{KL}}\left(\pi_\theta \parallel \pi_{\text{ref}}\right),
+Incorporating DAPO Asymmetric Clip-Higher \cite{yu2025dapo} ($\epsilon_{\text{low}} = 0.20, \epsilon_{\text{high}} = 0.28$) to encourage positive foreground discovery while strictly suppressing background hallucinations, alongside exact analytical Bernoulli KL regularization ($\beta_{\text{KL}} = 0.04$), yields our surrogate objective:
+\begin{multline}
+\mathcal{L}_{\text{Dr.GRPO}}(\theta) = -\frac{1}{G}\sum_{i=1}^G \min\!\Big(\rho_i(\theta) A_i^{\text{Dr.GRPO}}, \; \operatorname{clip}\!\big(\rho_i(\theta), \, 1-\epsilon_{\text{low}}, \, 1+\epsilon_{\text{high}}\big) A_i^{\text{Dr.GRPO}}\Big) \\
++ \beta_{\text{KL}}\,\mathbb{D}_{\text{KL}}\!\left(\pi_\theta \parallel \pi_{\text{ref}}\right),
 \label{eq:drgrpo_objective}
-\end{equation}
-where $\mathbb{D}_{\text{KL}}(\pi_\theta \parallel \pi_{\text{ref}}) = \frac{1}{N}\sum_{p=1}^N \left[\pi_{\theta,p}\log\frac{\pi_{\theta,p}}{\pi_{\text{ref},p}} + (1-\pi_{\theta,p})\log\frac{1-\pi_{\theta,p}}{1-\pi_{\text{ref},p}}\right]$. 
-
-Finally, the composite objective combines policy optimization with foreground-guided teacher distillation $\mathcal{L}_{\text{FG-Distill}}$ (anchoring $\hat{\mathbf{f}}_{\text{cls}}$ to $0.88\,\hat{\mathbf{f}}_{\text{cls}}^{\text{ref}} + 0.12\,\hat{\mathbf{f}}_{\text{fg}}^{\star}$ from best rollout $g^\star$) and binary cross-entropy gate alignment $\mathcal{L}_{\text{Gate-Align}}$:
+\end{multline}
+where $\mathbb{D}_{\text{KL}}(\pi_\theta \parallel \pi_{\text{ref}}) = \frac{1}{N}\sum_{p=1}^N \big[p_p^\theta \log\frac{p_p^\theta}{p_p^{\text{ref}}} + (1-p_p^\theta)\log\frac{1-p_p^\theta}{1-p_p^{\text{ref}}}\big]$. Combining $\mathcal{L}_{\text{Dr.GRPO}}$ with foreground-guided teacher distillation $\mathcal{L}_{\text{FG-Distill}}$ and binary cross-entropy gate alignment $\mathcal{L}_{\text{Gate-Align}}$ gives the complete Stage-2 loss:
 \begin{equation}
 \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{Dr.GRPO}} + 0.30\,\mathcal{L}_{\text{FG-Distill}} + 0.25\,\mathcal{L}_{\text{Gate-Align}}.
 \label{eq:total_grpo_loss}
 \end{equation}
+
+% -----------------------------------------------------------------------------
+% FIGURE: GROUP ROLLOUTS (G=8) & ADVANTAGE / CLIPPING ANALYSIS
+% -----------------------------------------------------------------------------
+\begin{figure*}[t!]
+\centering
+\begin{subfigure}[b]{\textwidth}
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig_group_rollouts.png}
+    \caption{Group rollout sampling ($G=8$ binary Bernoulli masks $\mathbf{a}^{(1)}\dots\mathbf{a}^{(8)}$) showing per-rollout sub-rewards ($R_{\text{eq}}, R_{\text{comp}}, R_{\text{sp}}$), total reward $R$, and unbiased advantage $A_i^{\text{Dr.GRPO}}$ (\textcolor{darkgreen}{\textbf{Green = Positive Advantage reinforced}}, \textcolor{crimsonred}{\textbf{Red = Negative Advantage suppressed}}).}
+    \label{subfig:group_rollouts}
+\end{subfigure}\\[0.5em]
+\begin{subfigure}[b]{\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{fig_grpo_advantage_clip.png}
+    \caption{Left: Stacked reward composition across $G=8$ rollouts relative to group mean $\bar{R}=0.568$. Center: Unbiased Dr.\ GRPO advantage vs.\ Rank-GRPO advantage. Right: DAPO Asymmetric Clip-Higher surrogate objective ($\epsilon_{\text{low}}=0.20, \epsilon_{\text{high}}=0.28$).}
+    \label{subfig:grpo_advantage_clip}
+\end{subfigure}
+\caption{\textbf{Group Rollout Verification and Dr.\ GRPO Surrogate Optimization Mechanics.} Rollouts that tightly cover the dog's head and torso achieve positive advantages ($A_i > 0$, e.g., $\mathbf{a}^{(2)}$ with $A_2 = +0.0231$), whereas rollouts leaking onto background corners receive negative advantages ($A_i < 0$, e.g., $\mathbf{a}^{(7)}$ with $A_7 = -0.0272$) and are suppressed by the policy gradient.}
+\label{fig:group_rollouts_and_rewards}
+\end{figure*}
 
 % =============================================================================
 % 4. EXPERIMENTAL SETUP
@@ -922,13 +1010,34 @@ To isolate the independent and compound contributions of our architectural desig
 \end{figure*}
 
 % -----------------------------------------------------------------------------
-% FIGURE 6: 2x2 ABLATION ATTENTION GRID
+% FIGURE: 2x2 ABLATION CONTIGUOUS MASK & BORDER LEAKAGE SHOWCASE
 % -----------------------------------------------------------------------------
 \begin{figure*}[t!]
 \centering
-\includegraphics[width=\textwidth]{ablation_2x2_attention_grid.png}
-\caption{\textbf{Qualitative $2\times 2$ Factorial Ablation Heatmap Grid.} From left to right: (1) Input Image, (2) Vanilla DINOv1, (3) Dr.\ DINO-Base (RoPE+Sparse), (4) Vanilla + Dr.\ GRPO, and (5) Dr.\ DINO-Full across four CIFAR-10 classes (\textit{airplane, horse, dog, ship}). Verifiable Dr.\ GRPO optimization effectively purges background noise, confining attention strictly to object boundaries.}
+\begin{subfigure}[b]{\textwidth}
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig_ablation_horse_masks.png}
+    \caption{Horse sample (\#5): Border leakage drops from $73.9\%$ (Vanilla) and $68.7\%$ (Dr.\ DINO-Base) to $\mathbf{36.4\%}$ in \textbf{Dr.\ DINO-Full}, while Foreground Mask IoU surges from $51.1\%$ and $53.5\%$ to $\mathbf{76.9\%}$.}
+    \label{subfig:ablation_horse_masks}
+\end{subfigure}\\[0.5em]
+\begin{subfigure}[b]{\textwidth}
+    \centering
+    \includegraphics[width=0.95\textwidth]{fig_ablation_dog_masks.png}
+    \caption{Dog sample (\#4): Border leakage drops dramatically from $97.5\%$ (Vanilla) and $89.0\%$ (Dr.\ DINO-Base) to $19.2\%$--$24.9\%$ after Dr.\ GRPO, while Foreground Mask IoU leaps from $39.1\%$ to $\mathbf{71.8\%}$--$\mathbf{76.1\%}$.}
+    \label{subfig:ablation_dog_masks}
+\end{subfigure}
+\caption{\textbf{End-to-End $2\times 2$ Factorial Ablation Visual Showcase (Smooth Attention Heatmaps, Border Leakage, and Contiguous Top-35\% Object Contours).} Row 1 of each panel shows smooth self-attention heatmaps and perimeter Border Leakage (\%). Row 2 shows the spectral-contour reference anchor (cyan) vs.\ extracted Top-35\% binary masks (\textcolor{borderorange}{\textbf{yellow = pre-RL models with background clutter}}, \textcolor{darkgreen}{\textbf{green = Dr.\ GRPO models forming contiguous object contours}}).}
 \label{fig:ablation_2x2_grid}
+\end{figure*}
+
+% -----------------------------------------------------------------------------
+% FIGURE: PRE-RL VS POST-RL 6-HEAD COMPARISON ON SHIP
+% -----------------------------------------------------------------------------
+\begin{figure*}[t!]
+\centering
+\includegraphics[width=\textwidth]{fig_multihead_pre_vs_post_grpo.png}
+\caption{\textbf{Direct Multi-Head \texttt{[CLS]} Attention Comparison (Heads 1--6) on CIFAR-10 \texttt{ship} (\#27): Stage-1 Pre-RL (\texttt{RoPE+Sparse}) vs.\ Stage-2 Post-RL (\texttt{+Dr.\ GRPO}).} In Stage-1 (top row), Heads 2, 3, and 5 suffer from perimeter border reflections and ocean background leakage (Border Leakage = $97.9\%$, FG IoU = $32.9\%$). After 10 epochs of label-free Dr.\ GRPO (bottom row), background border activations are systematically suppressed across all six attention heads (Border Leakage reduced to $\mathbf{33.4\%}$) and attention locks tightly onto the ship's hull and superstructure (FG IoU = $\mathbf{71.7\%}$, a $\mathbf{+38.8\%}$ per-sample jump).}
+\label{fig:multihead_pre_vs_post_grpo}
 \end{figure*}
 
 \paragraph{Analysis of Factorial Ablation Results:}
@@ -936,7 +1045,7 @@ To isolate the independent and compound contributions of our architectural desig
     \item \textbf{Dramatic Boost in Unsupervised Object Discovery:} Without policy optimization, Dr.\ DINO-Base focuses on discriminative local sub-structures (e.g., aircraft cockpits, animal heads), increasing linear probe accuracy (+2.15\% over Vanilla) while yielding a slightly lower holistic mask IoU ($55.45\%$ vs.\ $58.88\%$). Incorporating Dr.\ GRPO resolves this tension: Foreground Mask IoU leaps by \textbf{+20.10\%} on Vanilla DINOv1 ($58.88\% \to 78.98\%$) and \textbf{+16.99\%} on our RoPE+Sparse backbone ($55.45\% \to 72.44\%$). \texttt{CorLoc} reaches \textbf{98.17\%} on Dr.\ DINO-Full (+28.91\%) and \textbf{99.91\%} on Vanilla+Dr.\ GRPO (+19.98\%).
     \item \textbf{Synergy between Architectural Inductive Bias and Policy Alignment:} Unlike naive RL tuning that degrades representations, our analytical Bernoulli KL regularization ($\beta_{\text{KL}}=0.04$) and foreground distillation loss ($\mathcal{L}_{\text{FG-Distill}}$) preserve pre-trained knowledge. Dr.\ DINO-Full achieves the highest classification scores across all variants: \textbf{72.05\%} $k$-NN Top-1 (+0.92\% over baseline), \textbf{97.12\%} $k$-NN Top-5, and \textbf{80.67\%} Linear Probe accuracy (+2.60\% over baseline).
     \item \textbf{Monotonic Convergence without Policy Collapse (Table \ref{tab:grpo_dynamics} \& Figure \ref{fig:grpo_dynamics_plot}):} Across 10 epochs on ImageNet-100, mean verifiable reward ascends monotonically ($0.6613 \to 0.7443$ on Vanilla, $0.6045 \to 0.6826$ on Dr.\ DINO), while KL divergence stabilizes cleanly between $0.21$ and $0.26$.
-    \item \textbf{Visual Confirmation (Figure \ref{fig:ablation_2x2_grid}):} The 5-column qualitative grid demonstrates that while standard DINO exhibits diffuse background halos, Dr.\ GRPO-aligned models cleanly segment the complete contours of the airplane, horse, dog, and ship.
+    \item \textbf{Elimination of Border Leakage \& Multi-Head Alignment (Figures \ref{fig:ablation_2x2_grid} \& \ref{fig:multihead_pre_vs_post_grpo}):} Quantitative perimeter analysis confirms that Dr.\ GRPO slashes outer-ring border leakage by more than half (e.g., $73.9\% \to 36.4\%$ on \textit{horse}, $97.5\% \to 24.9\%$ on \textit{dog}, and $97.9\% \to 33.4\%$ on \textit{ship}), reorganizing all 6 attention heads into contiguous, background-free object masks.
 \end{itemize}
 
 % =============================================================================
