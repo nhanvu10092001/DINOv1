@@ -227,6 +227,53 @@ class DINOGRPOPolicyWrapper(nn.Module):
             "frozen_params": total_params - trainable_params,
         }
 
+    def _compute_spectral_spatial_gate(
+        self,
+        cls_attn: torch.Tensor,
+        patch_tokens: torch.Tensor,
+    ) -> torch.Tensor:
+        """Computes the combined learned policy gate + spectral-spatial TokenCut envelope.
+
+        Args:
+            cls_attn: Mean [CLS]->patch attention of shape (B, N).
+            patch_tokens: Normalized patch token embeddings of shape (B, N, D).
+
+        Returns:
+            Foreground gating probabilities in (0, 1)^N of shape (B, N).
+        """
+        B, N, _ = patch_tokens.shape
+        side = int(math.isqrt(N))
+
+        # 1. Learned MLP policy_gate logits
+        gate_logits = self.policy_gate(patch_tokens).squeeze(-1)  # (B, N)
+
+        # 2. TokenCut spectral affinity diffusion over positive cosine graph W
+        feats_norm = F.normalize(patch_tokens.float(), dim=-1, p=2)
+        affinity = torch.clamp(torch.bmm(feats_norm, feats_norm.transpose(1, 2)) - 0.15, min=0.0)
+        affinity = affinity / (affinity.sum(dim=-1, keepdim=True) + 1e-6)
+        spectral_attn = torch.bmm(affinity, cls_attn.float().unsqueeze(-1)).squeeze(-1)
+
+        # 3. 2D spatial local smoothing + peripheral background border suppression
+        if side * side == N:
+            spec_2d = spectral_attn.view(B, 1, side, side)
+            smooth_2d = F.avg_pool2d(
+                F.pad(spec_2d, (1, 1, 1, 1), mode="replicate"), kernel_size=3, stride=1
+            ).view(B, N)
+            coords = torch.linspace(-1.0, 1.0, steps=side, device=patch_tokens.device)
+            yy, xx = torch.meshgrid(coords, coords, indexing="ij")
+            r2 = (xx ** 2 + yy ** 2).reshape(1, N)
+            spatial_envelope = torch.exp(-0.65 * r2)
+            spectral_salience = smooth_2d * spatial_envelope
+        else:
+            spectral_salience = spectral_attn
+
+        s_mean = spectral_salience.mean(dim=-1, keepdim=True)
+        s_std = spectral_salience.std(dim=-1, keepdim=True) + 1e-6
+        s_z = (spectral_salience - s_mean) / s_std
+
+        combined_logits = gate_logits + 1.35 * s_z + self.sparsity_bias
+        return torch.sigmoid(combined_logits)
+
     def _compute_patch_probs_from_attn_and_tokens(
         self,
         attn: torch.Tensor,
@@ -254,8 +301,9 @@ class DINOGRPOPolicyWrapper(nn.Module):
 
         logits = self.attn_logit_scale * attn_z + self.sparsity_bias
         if use_gate:
-            gate_logits = self.policy_gate(patch_tokens).squeeze(-1)  # (B, N)
-            logits = logits + gate_logits
+            gate_probs = self._compute_spectral_spatial_gate(cls_attn, patch_tokens)
+            gate_logits = torch.log(gate_probs.clamp(1e-4, 1.0 - 1e-4) / (1.0 - gate_probs.clamp(1e-4, 1.0 - 1e-4)))
+            logits = 0.55 * logits + 0.45 * gate_logits
 
         probs = torch.sigmoid(logits)
         return torch.clamp(probs, min=1e-4, max=1.0 - 1e-4)
@@ -425,11 +473,12 @@ class DINOGRPOPolicyWrapper(nn.Module):
         tokens = self.backbone.norm(tokens)
         assert attn is not None
 
-        # Modulate [CLS]->patch attention with learned policy gate probabilities
+        # Modulate [CLS]->patch attention with learned Dr. GRPO policy gate & spectral envelope
         patch_tokens = tokens[:, 1:]
-        gate_probs = torch.sigmoid(self.policy_gate(patch_tokens).squeeze(-1) + self.sparsity_bias)
+        cls_attn = attn[:, :, 0, 1:].mean(dim=1)
+        gate_probs = self._compute_spectral_spatial_gate(cls_attn, patch_tokens)
         attn_out = attn.clone()
-        modulated_cls_attn = attn_out[:, :, 0, 1:] * gate_probs.unsqueeze(1)
+        modulated_cls_attn = attn_out[:, :, 0, 1:] * (gate_probs.unsqueeze(1) ** 1.85)
         modulated_cls_attn = modulated_cls_attn / (
             modulated_cls_attn.sum(dim=-1, keepdim=True) + 1e-8
         )
