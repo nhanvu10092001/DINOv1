@@ -1,180 +1,193 @@
-# Comprehensive Empirical Evaluation Report: Dr. DINO vs. Baseline ViT-Small
+# 📈 Comprehensive Empirical & Mathematical Benchmark Report: Dr. DINO
 
-A comprehensive technical evaluation report benchmarking two self-supervised DINOv1 (Vision Transformer — Caron et al., 2021) backbones after **190 epochs** of pre-training on **ImageNet-100** using an **NVIDIA H100 GPU**, evaluated downstream on the complete **CIFAR-10** benchmark:
-1. **Model 1 (Default / Baseline)**: Standard ViT-Small/16 with learnable Absolute Positional Embeddings (APE) and Dense Multi-Head Self-Attention.
-2. **Model 2 (Dr. DINO-Base Backbone)**: ViT-Small/16 integrating **Frequency-Adaptive 2D Rotary Position Embeddings (2D RoPE)** and **Spatial-Semantic Sparse Softmax Attention (S³ Attention)**.
-3. **Stage-2 Extension (Dr. DINO-Full)**: Unsupervised Reinforcement Learning with Verifiable Rewards (**Dr. GRPO**) evaluated via a full $2 \times 2$ ablation benchmark.
-4. **Primary Documentation**: Research paper available at [`papers/dr_dino.pdf`](papers/dr_dino.pdf) (*"Verification Is All You Need: Emergent Object Discovery in Self-Supervised Vision Transformers via Dr. GRPO"*), presentation slides at [`slides/defense_presentation.pdf`](slides/defense_presentation.pdf).
-5. **Authors**: Pham Cung Le Nhan Vu, Nguyen Hoang Khang, Nguyen Hoai Nam (*Master of Science in Data Science, VNUHCM -- University of Science*).
+<p align="left">
+  <a href="papers/dr_dino.pdf"><img src="https://img.shields.io/badge/Paper-dr__dino.pdf_(18_Pages)-b31b1b.svg?style=flat-square" alt="Paper"></a>
+  <a href="slides/defense_presentation.pdf"><img src="https://img.shields.io/badge/Slides-defense__presentation.pdf_(22_Slides)-003262.svg?style=flat-square" alt="Slides"></a>
+  <a href="notebooks/demo_03_end_to_end_2x2_ablation_showcase.ipynb"><img src="https://img.shields.io/badge/Notebooks-Interactive_Demos_(1--3)-ff8c00.svg?style=flat-square" alt="Notebooks"></a>
+</p>
 
----
+This technical report provides an end-to-end mathematical and empirical evaluation of **Dr. DINO** (**D**istillation with no labels **R**einforced via **Dr.** GRPO) against baseline **DINOv1** (*Emerging Properties in Self-Supervised Vision Transformers* — Caron et al., ICCV 2021). All models are pre-trained without supervision on **ImageNet-100** (`clane9/imagenet-100`) and evaluated downstream on the complete **CIFAR-10** benchmark (50,000 train / 10,000 test images):
 
-## 1. Checkpoint Metadata and Architectural Configuration
-
-| Parameter / Attribute | Default Baseline Model | RoPE + Sparse Attention Model |
-|---|---|---|
-| **Checkpoint Path** | `cp/checkpoints_default_2/checkpoint0190.pth` | `cp/checkpoints_rope_2/checkpoint0190.pth` |
-| **Pre-Training Dataset** | ImageNet-100 (`clane9/imagenet-100`) | ImageNet-100 (`clane9/imagenet-100`) |
-| **Pre-Training Hardware** | NVIDIA H100 GPU | NVIDIA H100 GPU |
-| **Pre-Training Epochs** | 190 epochs | 190 epochs |
-| **Evaluation Dataset** | CIFAR-10 (50k train / 10k test) | CIFAR-10 (50k train / 10k test) |
-| **Backbone Registry Identifier** | `vit_small` | `vit_small_sparse_rope` |
-| **Patch Size** | $16 \times 16$ | $16 \times 16$ |
-| **Transformer Blocks (Depth)** | 12 blocks | 12 blocks |
-| **Embedding Dimension ($D$)** | 384 | 384 |
-| **Attention Heads ($H$)** | 6 heads (64 dim/head) | 6 heads (64 dim/head) |
-| **MLP Expansion Ratio** | 4.0 (Hidden dim: 1536) | 4.0 (Hidden dim: 1536) |
-| **Positional Mechanism** | Learnable 1D/2D Absolute Positional Table | Frequency-Adaptive 2D RoPE (`adaptive_2d`) |
-| **Self-Attention Mechanism** | Full Dense Softmax Attention ($197 \times 197$) | Spatial-Semantic Sparse ($K_{\text{local}}=3, K_{\text{semantic}}=16$) |
-| **Projection Head (DINOHead)** | 3-layer MLP, Hidden 2048, Bottleneck 256, Out 16384 | 3-layer MLP, Hidden 2048, Bottleneck 256, Out 16384 |
+1. **Variant 1 — Vanilla DINOv1 (`vit_small`)**: Canonical ViT-Small/16 with static learnable Absolute Positional Embeddings (APEs) and dense $197 \times 197$ self-attention.
+2. **Variant 2 — Dr. DINO-Base (`vit_small_sparse_rope`)**: Stage-1 ViT-Small/16 integrating **Frequency-Adaptive 2D Rotary Position Embeddings (2D RoPE)** and **Spatial-Semantic Sparse Softmax Attention ($S^3$)**.
+3. **Variant 3 — Vanilla + Dr. GRPO**: Vanilla DINOv1 aligned via 10 epochs of Stage-2 **Unsupervised Reinforcement Learning with Verifiable Rewards (Dr. GRPO)**.
+4. **Variant 4 — Dr. DINO-Full (`vit_small_sparse_rope` + Dr. GRPO)**: Our complete framework combining continuous 2D relative geometry, structured $S^3$ sparsity, and label-free Dr. GRPO alignment.
 
 ---
 
-## 2. Parameter Profiling & Computational Complexity (FLOPs)
+## 1. Architectural Specifications & Checkpoint Matrix
 
-*Empirically measured on an **NVIDIA GeForce RTX 3070 8GB VRAM** at standard $224 \times 224$ input resolution (Batch size = 1 for FLOPs / Batch size = 128 for Throughput):*
-
-| Component / Metric | Default Baseline Model | RoPE + Sparse Model | Technical Specification |
-|---|:---:|:---:|---|
-| **Backbone Parameters** | **21,665,664** (~21.67M) | **21,665,664** (~21.67M) | Zero parameter overhead |
-| **Trainable Parameters** | 21,665,664 (100%) | 21,665,664 (100%) | Identical |
-| **Non-trainable Buffers** | 0 | 32 elements | Fixed inverse frequency buffer (`rope.inv_freq`) |
-| **DINO Projection Head Parameters** | 9,720,064 (~9.72M) | 9,720,064 (~9.72M) | Shared projection head architecture |
-| **Total Model Parameters** | **31,385,728** (~31.39M) | **31,385,728** (~31.39M) | Full Backbone + Projection Head |
-| **Backbone FLOPs ($224 \times 224$)** | **9.20 GFLOPs** (4.60 GMACs) | **9.20 GFLOPs** (4.60 GMACs) | Measured via PyTorch `FlopCounterMode` |
-| **DINO Head FLOPs** | 19.40 MFLOPs (0.019 GFLOPs) | 19.40 MFLOPs (0.019 GFLOPs) | Linear projection $384 \to 16384$ |
-| **Total Model FLOPs** | **9.22 GFLOPs** (4.61 GMACs) | **9.22 GFLOPs** (4.61 GMACs) | Exactly identical at theoretical level |
-| **Inference Latency** | **1.20 ms / image** | **2.20 ms / image** | Vector rotation arithmetic |
-| **Throughput (Inference)** | **831.9 images/sec** | **455.0 images/sec** | Measured at batch size 128 on RTX 3070 |
-
-> **Key Finding**: Frequency-Adaptive 2D RoPE and Spatial-Semantic Sparse Attention **strictly introduce zero parameter overhead** (preserving 21.67M parameters) and maintain exact theoretical FLOP parity (9.20 GFLOPs).
+| Parameter / Attribute | Baseline ViT-Small (`vit_small`) | Dr. DINO Backbone (`vit_small_sparse_rope`) |
+| :--- | :--- | :--- |
+| **Stage-1 Pretrained Checkpoint** | `cp/checkpoints_default_2/checkpoint0190.pth` | `cp/checkpoints_rope_2/checkpoint0190.pth` |
+| **Stage-2 Dr. GRPO Checkpoint** | `cp/grpo_production/default_grpo_best.pth` | `cp/grpo_production/rope_grpo_best.pth` |
+| **Pre-Training Dataset** | ImageNet-100 (~130,000 unlabeled images) | ImageNet-100 (~130,000 unlabeled images) |
+| **Stage-1 Training Schedule** | 190 epochs on NVIDIA H100 GPU (BS=128) | 190 epochs on NVIDIA H100 GPU (BS=128) |
+| **Stage-2 RLVR Schedule** | 10 epochs on 5,000 unlabeled ImageNet-100 images | 10 epochs on 5,000 unlabeled ImageNet-100 images |
+| **Patch Grid & Depth** | $16 \times 16$ patches ($14 \times 14$ grid), $L = 12$ blocks | $16 \times 16$ patches ($14 \times 14$ grid), $L = 12$ blocks |
+| **Embedding & Head Dimensions** | $D = 384$, $H = 6$ heads ($d_k = 64$ / head) | $D = 384$, $H = 6$ heads ($d_x = 32, d_y = 32$ / head) |
+| **Positional Encoding** | Static 1D/2D APE table (bicubic interpolation) | Frequency-Adaptive 2D RoPE (`adaptive_2d`, $M=16$ bands) |
+| **Self-Attention Operator** | Dense Softmax ($197 \times 197 = 38,809$ pairs) | $S^3$ Sparse Softmax ($3\times 3$ local + Top-$16$ + `[CLS]` = 26 keys) |
+| **DINO Projection Head** | 3-layer MLP ($384 \to 2048 \to 256 \to 16384$) | 3-layer MLP ($384 \to 2048 \to 256 \to 16384$) |
 
 ---
 
-## 3. Quantitative Downstream Benchmark (CIFAR-10 Transfer)
+## 2. Parameter Complexity & Hardware Profiling
 
-Following the standard DINO evaluation protocol (Caron et al., ICCV 2021, Section 3.2 and Table 6), representation quality is benchmarked under two canonical transfer settings:
-1. **$k$-Nearest Neighbors ($k$-NN) Classifier**: Fully frozen backbone; features are extracted from the training split (50,000 images) and evaluated on the validation split (10,000 images) with cosine distance, temperature $T=0.07$, and varying $k \in \{10, 20, 200\}$.
-2. **Linear Probing**: Fully frozen backbone; a supervised linear classification layer ($384 \to 10$) is trained with SGD (initial learning rate 0.1, momentum 0.9, cosine annealing scheduler) across 10, 20, 30, 50, and 100 epochs.
+*Measured on an **NVIDIA GeForce RTX 3070 (8 GB VRAM)** at $224 \times 224$ input resolution:*
 
-### Quantitative Comparison (190-Epoch Pre-Trained Checkpoints):
-
-| Evaluation Metric | Default Baseline Model | RoPE + Sparse Model | Improvement ($\Delta$) |
-|---|:---:|:---:|:---:|
-| **$k$-NN Classifier Top-1 ($k=10$)** | **74.41%** | **75.97%** | <span style="color:#00aa00">**+1.56%**</span> |
-| **$k$-NN Classifier Top-5 ($k=10$)** | **96.23%** | **96.55%** | <span style="color:#00aa00">**+0.32%**</span> |
-| **$k$-NN Classifier Top-1 ($k=20$)** | **74.34%** | **75.31%** | <span style="color:#00aa00">**+0.97%**</span> |
-| **$k$-NN Classifier Top-5 ($k=20$)** | **97.42%** | **97.79%** | <span style="color:#00aa00">**+0.37%**</span> |
-| **$k$-NN Classifier Top-1 ($k=200$)** | **70.41%** | **70.65%** | <span style="color:#00aa00">**+0.24%**</span> |
-| **Linear Probing Top-1 (Epoch 10)** | 80.92% | **83.38%** | <span style="color:#00aa00">**+2.46%**</span> |
-| **Linear Probing Top-1 (Epoch 20)** | 81.09% | **83.84%** | <span style="color:#00aa00">**+2.75%**</span> |
-| **Linear Probing Top-1 (Epoch 30)** | 80.85% | **83.63%** | <span style="color:#00aa00">**+2.78%**</span> |
-| **Linear Probing Top-1 (Epoch 50)** | 80.98% | **83.70%** | <span style="color:#00aa00">**+2.72%**</span> |
-| **Linear Probing Top-1 (Epoch 100)** | 81.34% | **83.90%** | <span style="color:#00aa00">**+2.56%**</span> |
-| **Linear Probing Top-1 (Best Checkpoint)** | **81.46%** | **83.98%** | <span style="color:#00aa00">**+2.52%**</span> |
-| **Linear Probing Top-5 (Best Checkpoint)** | **99.31%** | **99.44%** | <span style="color:#00aa00">**+0.13%**</span> |
-| **Linear Probing Final Train Loss (Epoch 100)** | 0.4566 | **0.4019** | <span style="color:#00aa00">**-0.0547 (Superior Convergence)**</span> |
-| **Linear Probing Final Val Loss (Epoch 100)** | 0.5457 | **0.4770** | <span style="color:#00aa00">**-0.0687 (Superior Generalization)**</span> |
-
-### Representation Quality Analysis:
-- **Enhanced Semantic Clustering**: The RoPE + Sparse Attention model achieves notable gains of **+1.56% in $k$-NN ($k=10$)** and **+2.52% in Linear Probing (Best Checkpoint)**, demonstrating that relative 2D coordinate rotations naturally organize semantic categories more compactly in the embedding space.
-- **Substantially Faster Linear Convergence**: At Epoch 10 of Linear Probing (`lr=0.1`), the RoPE model already reaches **79.86%** (outperforming the baseline at 73.76% by **+6.10%**). This confirms that features extracted from the proposed architecture are intrinsically more linearly separable right from the start.
+| Component / Resource Metric | Baseline ViT-Small | Dr. DINO (Ours) | Engineering & Architectural Note |
+| :--- | :---: | :---: | :--- |
+| **Backbone Trainable Parameters** | **21,665,664** | **21,665,664** | **0% Parameter Overhead (Exact Parity)** |
+| **Non-trainable Buffers** | 0 | 32 elements | Precomputed inverse frequencies (`rope.inv_freq`) |
+| **DINO Projection Head Parameters** | 9,720,064 | 9,720,064 | Identical MLP + WeightNorm prototype layer |
+| **Total Pretraining Parameters** | **31,385,728** | **31,385,728** | **31.39M (Identical)** |
+| **Backbone Theoretical FLOPs** | **9.20 GFLOPs** | **9.20 GFLOPs** | **Exact Parity (4.60 GMACs via `FlopCounterMode`)** |
+| **Active Keys per Spatial Query** | 197 keys | **26 keys** | **-86.8% Sparsity Reduction (13.2% active density)** |
+| **Stage-2 Trainable Policy Params** | 3,587,521 | 3,587,521 | **8.27% of 43.37M wrapper (`blocks[10..11]` + `policy_gate`)** |
+| **Stage-2 Peak Training VRAM** | **< 3.0 GB** | **< 3.0 GB** | Shared frozen prefix `blocks[0..9]` under `torch.no_grad()` |
+| **Single-Image Latency (BS=1)** | 1.20 ms | 2.20 ms | +1.00 ms from un-fused PyTorch RoPE & Top-$K$ indexing |
 
 ---
 
-## 4. Qualitative Analysis: Self-Attention Map Visualizations
+## 3. Mathematical & Empirical Analysis of Stage-1 Innovations
 
-We extract the final-layer multi-head self-attention maps corresponding to the `[CLS]` token across all 6 attention heads over the spatial patch grid ($14 \times 14$):
+### 3.1. Frequency-Adaptive 2D RoPE (`models/rope.py`)
+For each head ($d_k = 64$), we split channels into horizontal ($d_x = 32$) and vertical ($d_y = 32$) subspaces ($M = 16$ rotation planes per axis with $\omega_m = 10000^{-2m/d_x}$). To simultaneously preserve sharp local edges and multi-crop scale invariance, we blend raw coordinates $x_{\text{raw}}$ and normalized coordinates $x_{\text{norm}} = x_{\text{raw}}(S_{\text{ref}}/W_g)$ via a spectral ramp $\alpha_m$:
 
-### 1. Class: Airplane
-- **Visual File**: `output/attention_comparison.png`
-- **Observations**:
-  - **Default Baseline**: Attention is widely diffused; sky background behind the fuselage is heavily activated across Heads 1 and 3.
-  - **RoPE + Sparse Model**: Activation of the `[CLS]` token tightly contours the aircraft fuselage, wings, and empennage. Heads 2 and 5 cleanly isolate structural boundaries and suppress background sky clutter.
+$$\alpha_m = 1 - \frac{m}{M - 1} \in [0, 1], \qquad x_m^{\text{adapt}} = \alpha_m \, x_{\text{raw}} + (1 - \alpha_m) \, x_{\text{norm}}, \qquad y_m^{\text{adapt}} = \alpha_m \, y_{\text{raw}} + (1 - \alpha_m) \, y_{\text{norm}}$$
 
-### 2. Class: Horse
-- **Visual File**: `output/attention_comparison_horse.png`
-- **Observations**:
-  - **Default Baseline**: Attention captures broad color patches but bleeds significantly across the animal's boundary into surrounding grass.
-  - **RoPE + Sparse Model**: Accurately outlines the dorsal curve, muzzle, and four legs. Frequency-Adaptive 2D RoPE preserves high-frequency spatial coordinate precision, allowing the network to sharply demarcate foreground subject boundaries from background context.
+For uniform carrier vectors ($\mathbf{q}_c = \mathbf{k}_j = \mathbf{1}$), the exact 2D relative positional decay kernel takes the closed harmonic form:
+
+$$\mathcal{K}_{\text{RoPE}}(c, j) = \langle \mathbf{q}_c^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle = \sum_{m=0}^{M-1} 2\cos\!\big(\Delta x_m^{\text{adapt}} \omega_m\big) + \sum_{m=0}^{M-1} 2\cos\!\big(\Delta y_m^{\text{adapt}} \omega_m\big)$$
+
+<p align="center">
+  <img src="output/fig_rope_harmonics.png" width="100%" alt="2D RoPE Harmonics"/>
+  <img src="output/fig_rope_extrapolation.png" width="95%" alt="2D RoPE Extrapolation"/>
+</p>
+
+### 3.2. Spatial-Semantic Sparse Attention ($S^3$, `models/sparse_attention.py`)
+Each spatial patch query $i \in \{1, \dots, 196\}$ attends strictly to a composite support set $\mathcal{S}_i$ of **26 active keys** (9 local Chebyshev neighbors $\mathcal{N}_{\text{local}}(i)$ + 16 dynamic semantic Top-$K$ tokens $\mathcal{N}_{\text{semantic}}(i)$ + 1 global `[CLS]` conduit), normalized via exact $-\infty$ masking prior to Softmax:
+
+$$\mathcal{S}_i = \mathcal{N}_{\text{local}}(i) \;\cup\; \operatorname{Top-}16_{j \notin \mathcal{N}_{\text{local}}(i)}\!\left(\frac{\langle \mathbf{q}_i^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle}{\sqrt{d_k}}\right) \;\cup\; \{\text{CLS}\}, \qquad A_{ij} = \frac{\exp(\tilde{s}_{ij})}{\sum_{l \in \mathcal{S}_i} \exp(\tilde{s}_{il})}$$
+
+<p align="center">
+  <img src="output/fig_s3_routing_decomp.png" width="100%" alt="S3 Routing Decomposition"/>
+</p>
 
 ---
 
-## 5. Unsupervised Policy Optimization with Dr. GRPO & Full $2 \times 2$ Ablation Benchmark
+## 4. Standardized 190-Epoch CIFAR-10 Classification Benchmark
 
-To completely suppress background clutter in self-attention maps **without requiring class labels or neural reward models**, we introduce an unsupervised Reinforcement Learning with Verifiable Rewards (**RLVR — Dr. GRPO**) pipeline via `models/grpo_policy_wrapper.py` (`DINOGRPOPolicyWrapper`) and `losses/dr_grpo_loss.py` (`DrGRPOLoss`):
-- **Shared-Prefix Policy Wrapper**: Freezes the first 10 Transformer blocks (`blocks[0..9]`), unlocking only the top 2 blocks (`blocks[10..11]`), `LayerNorm`, and a lightweight residual gating head ($384 \to 96 \to 1$). This trains only **3,587,521 / 43,369,153 parameters (8.27%)** while maintaining an exact frozen reference copy (`ref_model`).
-- **Verifiable Unsupervised Rewards (`self_supervised_v1`)**: Samples groups of $G=8$ binary masks $\mathbf{a}^{(g)} \in \{0, 1\}^{196}$ per image and maximizes a weighted objective:
-  1. *Geometric Equivariance IoU* ($w_{\text{eq}} = 0.45$): Consistency under horizontal flipping $T^{-1}(\pi_\theta(T(I)))$.
-  2. *TokenCut Spectral & 2D Spatial Compactness* ($w_{\text{comp}} = 0.35$): Normalized-Cut intra-foreground affinity minus foreground-to-background cut, regularized by 2D Total Variation smoothness.
-  3. *Target Sparsity Ratio Prior* ($w_{\text{spar}} = 0.20$): Constrains foreground patch occupancy near $\rho_{\text{target}} = 0.35$.
-- **Dr. GRPO Objective**: Unbiased group-relative advantage estimation ($A^{(g)} = R^{(g)} - \bar{R}$), length-normalized log-probabilities ($N=196$), DAPO-style asymmetric clipping ($\epsilon_{\text{low}}=0.20, \epsilon_{\text{high}}=0.28$), and analytical Bernoulli KL regularization ($\beta_{\text{KL}}=0.04$) against the frozen reference model.
+| Evaluation Metric | Baseline ViT-Small | Dr. DINO-Base (Ours) | Absolute Gain ($\Delta$) |
+| :--- | :---: | :---: | :---: |
+| **$k$-NN Top-1 ($k=10$)** | 74.41% | **75.97%** | **+1.56%** |
+| **$k$-NN Top-5 ($k=10$)** | 96.23% | **96.55%** | **+0.32%** |
+| **$k$-NN Top-1 ($k=20$)** | 74.34% | **75.31%** | **+0.97%** |
+| **$k$-NN Top-5 ($k=20$)** | 97.42% | **97.79%** | **+0.37%** |
+| **$k$-NN Top-1 ($k=200$)** | 70.41% | **70.65%** | **+0.24%** |
+| **Linear Probing Top-1 (Epoch 10)** | 80.92% | **83.38%** | **+2.46%** *(Surpasses baseline's 100-ep peak in 10 epochs)* |
+| **Linear Probing Top-1 (Epoch 20)** | 81.09% | **83.84%** | **+2.75%** |
+| **Linear Probing Top-1 (Epoch 30)** | 80.85% | **83.63%** | **+2.78%** |
+| **Linear Probing Top-1 (Epoch 50)** | 80.98% | **83.70%** | **+2.72%** |
+| **Linear Probing Top-1 (Epoch 100)** | 81.34% | **83.90%** | **+2.56%** |
+| **Linear Probing Top-1 (Best Checkpoint)** | 81.46% | **83.98%** | **+2.52%** |
+| **Linear Probing Top-5 (Best Checkpoint)** | 99.31% | **99.44%** | **+0.13%** |
+| **Linear Probing Final Train Loss (Epoch 100)** | 0.4566 | **0.4019** | **-0.0547 (Tighter intra-class compactness)** |
+| **Linear Probing Final Val Loss (Epoch 100)** | 0.5457 | **0.4770** | **-0.0687 (Superior generalization margin)** |
 
-### Full $2 \times 2$ Ablation Study on CIFAR-10 (50,000 train / 10,000 test):
+---
 
-| Model Variant | Backbone Architecture | Dr. GRPO Policy | $k$-NN Top-1 (%) | $k$-NN Top-5 (%) | Linear Probe Top-1 (%) | Foreground Mask IoU (%) | CorLoc (%) |
+## 5. Stage-2 Verifiable Policy Optimization via Dr. GRPO
+
+### 5.1. 6-Step Bernoulli Patch Policy Construction (`models/grpo_policy_wrapper.py`)
+Given head-averaged last-layer `[CLS]` attention $\bar{a}_p = \frac{1}{H}\sum_{h=1}^H A^{(L)}_{h,\text{CLS},p}$, we compute spatial Z-scores $\hat{a}_p = (\bar{a}_p - \mu_{\bar{a}})/(\sigma_{\bar{a}}+\epsilon)$ and fuse them with the learned residual MLP gate $g_\phi(\mathbf{z}_p)$, TokenCut spectral diffusion prior $\hat{s}_p$, and log-odds sparsity bias $b_{\text{sparsity}} = \log(0.35 / 0.65) \approx -0.619$:
+
+$$\ell_p^{\text{ref}} = \gamma \hat{a}_p^{\text{ref}} + b_{\text{sparsity}}, \qquad \ell_p^\theta = 0.55\big(\gamma \hat{a}_p^\theta + b_{\text{sparsity}}\big) + 0.45\big(g_\phi(\mathbf{z}_p) + 1.35\,\hat{s}_p + b_{\text{sparsity}}\big), \qquad p_p^\theta = \sigma(\ell_p^\theta)$$
+
+<p align="center">
+  <img src="output/fig_policy_construction.png" width="100%" alt="6-Step Bernoulli Policy Construction"/>
+</p>
+
+### 5.2. Tri-Objective Self-Supervised Verifiable Rewards (`losses/dr_grpo_loss.py`)
+For each rollout $\mathbf{a}^{(g)} \in \{0, 1\}^{196}$ ($g \in \{1, \dots, 8\}$), we evaluate:
+
+$$R(\mathbf{a}^{(g)}, I) = 0.45\,R_{\text{equiv}}(\mathbf{a}^{(g)}, I) + 0.35\,R_{\text{compact}}(\mathbf{a}^{(g)}, I) + 0.20\,R_{\text{sparsity}}(\mathbf{a}^{(g)})$$
+
+1. **Geometric Equivariance IoU ($w_{\text{eq}}=0.45$)**: Binary IoU against horizontal-flip anchor $\mathbf{m}_{\text{eq}} = \operatorname{Top-}69\big(T^{-1}(\pi_\theta(T(I)))\big)$.
+2. **TokenCut Association & 2D Total Variation ($w_{\text{comp}}=0.35$)**: $0.65 R_{\text{ncut}}(\mathbf{a}^{(g)}) + 0.35 R_{\text{TV}}(\mathbf{a}^{(g)})$.
+3. **Target Sparsity Ratio Prior ($w_{\text{spar}}=0.20$)**: $\max\!\big(0, 1 - |\bar{a}^{(g)} - 0.35|^{1.5} / 0.65^{1.5}\big)$.
+
+<p align="center">
+  <img src="output/fig_reward_decomposition.png" width="100%" alt="Reward Decomposition"/>
+  <img src="output/fig_group_rollouts.png" width="96%" alt="Group Rollout Sampling"/>
+  <img src="output/fig_grpo_advantage_clip.png" width="100%" alt="Dr. GRPO Advantage and DAPO Clip-Higher"/>
+</p>
+
+---
+
+## 6. Complete $2 \times 2$ Factorial Ablation & Visual Showcase
+
+### 6.1. Quantitative $2 \times 2$ Ablation Matrix (CIFAR-10: 50,000 Train / 10,000 Test)
+
+<p align="center">
+  <img src="output/fig_ablation_barchart.png" width="100%" alt="2x2 Factorial Ablation Bar Charts"/>
+</p>
+
+| Model Variant | Backbone Arch | Dr. GRPO Policy | $k$-NN Top-1 | $k$-NN Top-5 | Linear Probe Top-1 | Foreground Mask IoU | CorLoc ($\ge 0.5$) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| 1. Vanilla DINOv1 | `vit_small` | No | 71.13% | 96.57% | 78.07% | 58.88% | 79.93% |
-| 2. RoPE+Sparse DINOv1 | `vit_small_sparse_rope` | No | 71.83% | 96.98% | 80.22% | 55.45% | 69.26% |
-| 3. Vanilla + Dr. GRPO | `vit_small` | Yes | 71.29% | 96.73% | 78.44% | **78.98%** | **99.91%** |
-| **4. RoPE+Sparse + Dr. GRPO (Full Proposed)** | `vit_small_sparse_rope` | **Yes** | **72.05%** | **97.12%** | **80.67%** | **72.44%** | **98.17%** |
+| **1. Vanilla DINOv1** | `vit_small` | No | 71.13% | 96.57% | 78.07% | 58.88% | 79.93% |
+| **2. Dr. DINO-Base** | `vit_small_sparse_rope` | No | 71.83% | 96.98% | 80.22% | 55.45% | 69.26% |
+| **3. Vanilla + Dr. GRPO** | `vit_small` | Yes | 71.29% | 96.73% | 78.44% | **78.98%** | **99.91%** |
+| **4. Dr. DINO-Full (Ours)** | `vit_small_sparse_rope` | **Yes** | **72.05%** | **97.12%** | **80.67%** | **72.44%** | **98.17%** |
+| *Impact of Dr. GRPO on Vanilla (3 vs. 1)* | — | — | **+0.16%** | **+0.16%** | **+0.37%** | **+20.10%** | **+19.98%** |
+| *Impact of Dr. GRPO on Dr. DINO (4 vs. 2)* | — | — | **+0.22%** | **+0.14%** | **+0.45%** | **+16.99%** | **+28.91%** |
+| *Full Dr. DINO vs. Baseline (4 vs. 1)* | — | — | **+0.92%** | **+0.55%** | **+2.60%** | **+13.56%** | **+18.24%** |
 
-- **Dr. GRPO Gain on Vanilla DINOv1**: `+0.16%` $k$-NN Top-1, `+0.37%` Linear Probe, **`+20.10%` Foreground Mask IoU** ($58.88\% \to 78.98\%$), **`+19.98%` CorLoc** ($79.93\% \to 99.91\%$).
-- **Dr. GRPO Gain on RoPE+Sparse DINOv1**: `+0.22%` $k$-NN Top-1, `+0.45%` Linear Probe, **`+16.99%` Foreground Mask IoU** ($55.45\% \to 72.44\%$), **`+28.91%` CorLoc** ($69.26\% \to 98.17\%$).
-- **Full Proposed Method (`RoPE+Sparse+Dr.GRPO`) vs. Vanilla Baseline**: **`+0.92%` $k$-NN Top-1**, **`+2.60%` Linear Probe**, **`+13.56%` Foreground IoU**, **`+18.24%` CorLoc**.
-- **5-Column Visual Attention Grid (`output/ablation_2x2_attention_grid.png`)**: Clearly demonstrates progressive foreground focus and background elimination across all 4 variants on *airplane, horse, dog, and ship*.
+### 6.2. 10-Epoch Stage-2 Training Dynamics
+
+| Epoch | Vanilla+Dr.GRPO Reward | Vanilla+Dr.GRPO KL | Vanilla+Dr.GRPO IoU (%) | Dr. DINO-Full Reward | Dr. DINO-Full KL | Dr. DINO-Full IoU (%) |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **0 (Init)** | — | 0.0000 | 58.72% | — | 0.0000 | 55.59% |
+| **1** | 0.6613 | 0.1066 | 76.32% | 0.6045 | 0.1172 | 71.17% |
+| **2** | 0.7330 | 0.1980 | 77.42% | 0.6561 | 0.2116 | 71.82% |
+| **4** | 0.7348 | 0.2040 | 77.74% | 0.6711 | 0.2420 | **72.31%** |
+| **6** | 0.7403 | 0.2104 | 78.33% | 0.6782 | 0.2557 | 71.88% |
+| **8** | 0.7423 | 0.2142 | 78.71% | 0.6804 | 0.2621 | 71.78% |
+| **10** | **0.7443** | 0.2178 | **78.82%** | **0.6826** | 0.2650 | 71.56% |
+
+### 6.3. Qualitative Showcase: Contiguous Object Masks, Border Leakage, and Multi-Head Alignment
+
+<p align="center">
+  <img src="output/fig_ablation_horse_masks.png" width="100%" alt="Horse 2x2 Comparison"/>
+  <img src="output/fig_ablation_dog_masks.png" width="100%" alt="Dog 2x2 Comparison"/>
+  <img src="output/fig_multihead_pre_vs_post_grpo.png" width="100%" alt="Multi-Head Pre-RL vs Post-RL Comparison on Ship"/>
+</p>
 
 ---
 
-## 6. Reproduction and Benchmark Commands
+## 7. Reproduction Commands
 
-All evaluation tools are standardized and accessible via the command line:
-
-### 1. $k$-NN Classifier Benchmark ($k=20$)
 ```bash
-# Evaluate Default Baseline Model
-python eval/eval_knn.py \
-    --data_path data/cifar10 \
-    --dataset cifar10 \
-    --pretrained_weights cp/checkpoints_default_2/checkpoint0190.pth \
-    --arch vit_small \
-    --k 20
-
-# Evaluate RoPE + Sparse Attention Model
+# 1. Stage-1 k-NN Benchmark (k=10 or k=20)
 python eval/eval_knn.py \
     --data_path data/cifar10 \
     --dataset cifar10 \
     --pretrained_weights cp/checkpoints_rope_2/checkpoint0190.pth \
     --arch vit_small_sparse_rope \
-    --k 20
-```
+    --k 10
 
-### 2. Linear Probing Benchmark (30 Epochs)
-```bash
-# Evaluate Default Baseline Model
-python eval/eval_linear.py \
-    --data_path data/cifar10 \
-    --dataset cifar10 \
-    --pretrained_weights cp/checkpoints_default_2/checkpoint0190.pth \
-    --arch vit_small \
-    --epochs 30 \
-    --lr 0.1 \
-    --cache_features
-
-# Evaluate RoPE + Sparse Attention Model
+# 2. Stage-1 Linear Probing Benchmark
 python eval/eval_linear.py \
     --data_path data/cifar10 \
     --dataset cifar10 \
     --pretrained_weights cp/checkpoints_rope_2/checkpoint0190.pth \
     --arch vit_small_sparse_rope \
-    --epochs 30 \
+    --epochs 100 \
     --lr 0.1 \
     --cache_features
-```
 
-### 3. Stage-2 Dr. GRPO Optimization & $2 \times 2$ Ablation Execution
-```bash
-# Run Unsupervised Dr. GRPO Policy Optimization for both variants
+# 3. Stage-2 Verifiable Dr. GRPO Optimization
 python train_grpo_post.py \
     --train_data_path data/train \
     --eval_data_path data/cifar10 \
@@ -186,7 +199,7 @@ python train_grpo_post.py \
     --adv_type dr_grpo \
     --reward_mode self_supervised_v1
 
-# Run full 2x2 ablation evaluation & export 5-column attention grid
+# 4. Complete 2x2 Factorial Ablation Benchmark
 python eval/eval_ablation_2x2.py \
     --data_path data/cifar10 \
     --dataset cifar10 \
@@ -194,22 +207,3 @@ python eval/eval_ablation_2x2.py \
     --max_train_samples 0 \
     --max_val_samples 0
 ```
-
-### 4. Self-Attention Map Visualization
-```bash
-python eval/visualize_attention.py \
-    --image_path output/sample_airplane.jpg \
-    --pretrained_weights cp/checkpoints_rope_2/checkpoint0190.pth \
-    --arch vit_small_sparse_rope \
-    --output_dir output
-```
-
----
-
-## 7. Conclusions & Findings
-
-1. **Architectural Efficacy of RoPE + Sparse Attention**: Integrating Frequency-Adaptive 2D RoPE with Spatial-Semantic Sparse Attention consistently improves unsupervised representation quality across all downstream benchmarks:
-   - **+1.56% $k$-NN ($k=10$) Top-1 Accuracy** ($74.41\% \to 75.97\%$).
-   - **+2.52% Linear Probing (Best Checkpoint) Top-1 Accuracy** ($81.46\% \to 83.98\%$).
-2. **Efficacy of Verifiable Dr. GRPO Optimization**: Across just 10 epochs of label-free RLVR on 8.27% unlocked parameters, **Dr. GRPO** elevates **Foreground Mask IoU by +16.99% to +20.10%** (reaching **98.17%–99.91% CorLoc**), while further improving downstream $k$-NN and Linear Probe performance.
-3. **Resource Efficiency**: The architecture strictly maintains 100% parameter parity (21.67M backbone parameters) and theoretical FLOP parity (9.20 GFLOPs), proving that empirical gains stem purely from principled geometric modeling and unsupervised policy optimization.
