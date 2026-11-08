@@ -252,5 +252,7 @@ output/logs/
 *.tfevents*
 scalar_events.jsonl
 *.log
-*.png
-*.jpg
+
+# Allow publication figures in output/
+!output/*.png
+!output/*.jpg

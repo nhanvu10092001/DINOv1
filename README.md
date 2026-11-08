@@ -8,7 +8,7 @@
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.9_%7C_3.10_%7C_3.11_%7C_3.12-3776AB.svg?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-2ea44f.svg?style=for-the-badge" alt="License"></a>
   <a href="papers/dr_dino.pdf"><img src="https://img.shields.io/badge/Paper-PDF_(18_Pages)-b31b1b.svg?style=for-the-badge&logo=arxiv&logoColor=white" alt="Paper"></a>
-  <a href="slides/defense_presentation.pdf"><img src="https://img.shields.io/badge/Slides-Deck_(22_Slides)-003262.svg?style=for-the-badge" alt="Slides"></a>
+  <a href="slides/defense_presentation.pdf"><img src="https://img.shields.io/badge/Slides-Deck_(24_Slides)-003262.svg?style=for-the-badge" alt="Slides"></a>
 </p>
 
 <p align="center">
@@ -45,9 +45,9 @@ Self-supervised Vision Transformers trained via self-distillation without labels
 
 | Pillar | Core Mechanism | Key Mathematical & Engineering Advantage |
 | :--- | :--- | :--- |
-| **1. Frequency-Adaptive 2D RoPE** | Continuous 2D axial rotation with spectral ramp $\alpha_m = 1 - \frac{m}{M-1}$ | High frequencies preserve discrete patch lattice steps ($x_{\text{raw}}$); low frequencies maintain scale-invariant global envelopes ($x_{\text{norm}}$). `[CLS]` remains unrotated ($\mathbf{R}=\mathbf{I}$). |
+| **1. Frequency-Adaptive 2D RoPE** | Continuous 2D axial rotation with spectral ramp $\alpha\_m = 1 - \frac{m}{M-1}$ | High frequencies preserve discrete patch lattice steps ($x_{\text{raw}}$); low frequencies maintain scale-invariant global envelopes ($x_{\text{norm}}$). `[CLS]` remains unrotated ($\mathbf{R}=\mathbf{I}$). |
 | **2. Spatial-Semantic Sparse Attention ($S^3$)** | Local $3\times 3$ Chebyshev window $\cup$ Dynamic Top-$16$ semantic keys $\cup$ Bidirectional `[CLS]` | Prunes active keys from $197 \to \mathbf{26}$ per query (**-86.8% background pairs**) with exact $-\infty$ masked Softmax normalization and $4\times$ higher peak foreground density. |
-| **3. Verifiable RLVR via Dr. GRPO** | Shared-prefix Bernoulli patch policy optimized against 3 deterministic visual verifiers | Unlocks only the top 2 ViT blocks + lightweight gate $g_\phi$ (**8.27% params, < 3 GB VRAM**). Boosts Foreground Mask IoU by **+16.99% to +20.10%** and reaches **99.91% CorLoc** without labels or neural critics. |
+| **3. Verifiable RLVR via Dr. GRPO** | Shared-prefix Bernoulli patch policy optimized against 3 deterministic visual verifiers | Unlocks only the top 2 ViT blocks + lightweight gate $g\_\phi$ (**8.27% params, < 3 GB VRAM**). Boosts Foreground Mask IoU by **+16.99% to +20.10%** and reaches **99.91% CorLoc** without labels or neural critics. |
 
 ---
 
@@ -81,11 +81,11 @@ flowchart TB
 ## 🔬 Visual Deep Dive: From Mathematical Theory to Empirical Proof
 
 ### 1. Stage-1 Innovation I: Frequency-Adaptive 2D RoPE
-Instead of static lookup tables, we partition each attention head ($d_k = 64$) into $X$ and $Y$ axes ($d_x = d_y = 32$, $M = 16$ frequency bands $\omega_m = 10000^{-2m/d_x}$) and blend raw vs. scale-normalized coordinates across the frequency spectrum:
+Instead of static lookup tables, we partition each attention head ($d\_k = 64$) into $X$ and $Y$ axes ($d\_x = d\_y = 32$, $M = 16$ frequency bands $\omega\_m = 10000^{-2m/d\_x}$) and blend raw vs. scale-normalized coordinates across the frequency spectrum:
 
 $$\alpha_m = 1 - \frac{m}{M - 1} \in [0, 1], \qquad x_m^{\text{adapt}} = \alpha_m \, x_{\text{raw}} + (1 - \alpha_m) \, x_{\text{norm}}, \qquad y_m^{\text{adapt}} = \alpha_m \, y_{\text{raw}} + (1 - \alpha_m) \, y_{\text{norm}}$$
 
-$$\mathcal{K}_{\text{RoPE}}(c, j) = \langle \mathbf{q}_c^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle = \sum_{m=0}^{M-1} 2\cos\!\big(\Delta x_m^{\text{adapt}} \omega_m\big) + \sum_{m=0}^{M-1} 2\cos\!\big(\Delta y_m^{\text{adapt}} \omega_m\big)$$
+$$\mathcal{K}_{\text{RoPE}}(c, j) = \langle \mathbf{q}_c^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle = 2 \sum_{m=0}^{M-1} \Big[\cos(\Delta x_m^{\text{adapt}} \omega_m) + \cos(\Delta y_m^{\text{adapt}} \omega_m)\Big]$$
 
 <p align="center">
   <img src="output/fig_rope_harmonics.png" width="100%" alt="2D RoPE Basis Harmonics"/>
@@ -95,9 +95,9 @@ $$\mathcal{K}_{\text{RoPE}}(c, j) = \langle \mathbf{q}_c^{\text{rot}}, \, \mathb
 ---
 
 ### 2. Stage-1 Innovation II: Spatial-Semantic Sparse Attention ($S^3$)
-Every spatial query $i \in \{1, \dots, 196\}$ routes strictly through **26 active keys** (**86.8% reduction**), applying exact $-\infty$ masking prior to Softmax normalization so $\sum_{j \in \mathcal{S}_i} A_{ij} \equiv 1$:
+Every spatial query $i \in \{1, \dots, 196\}$ routes strictly through **26 active keys** (**86.8% reduction**), applying exact $-\infty$ masking prior to Softmax normalization so $\sum\_{j \in \mathcal{S}\_i} A\_{ij} \equiv 1$:
 
-$$\mathcal{S}_i = \underbrace{\mathcal{N}_{\text{local}}(i)}_{3\times 3\text{ window (9)}} \;\cup\; \underbrace{\operatorname{Top-}16_{j \notin \mathcal{N}_{\text{local}}(i)}\!\left(\frac{\langle \mathbf{q}_i^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle}{\sqrt{d_k}}\right)}_{\text{Dynamic Semantic Keys (16)}} \;\cup\; \underbrace{\{\text{CLS}\}}_{\text{Global Conduit (1)}}$$
+$$\mathcal{S}_i = \underbrace{\mathcal{N}_{\text{local}}(i)}_{3\times 3\text{ window (9)}} \;\cup\; \underbrace{\text{Top-}16_{j \notin \mathcal{N}_{\text{local}}(i)}\left(\frac{\langle \mathbf{q}_i^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle}{\sqrt{d_k}}\right)}_{\text{Dynamic Semantic Keys (16)}} \;\cup\; \underbrace{\{\text{CLS}\}}_{\text{Global Conduit (1)}}$$
 
 <p align="center">
   <img src="output/fig_s3_routing_decomp.png" width="100%" alt="S3 Sparse Attention Routing Decomposition"/>
@@ -126,7 +126,7 @@ $$\mathcal{S}_i = \underbrace{\mathcal{N}_{\text{local}}(i)}_{3\times 3\text{ wi
 
 ### 3. Stage-2 Innovation III: Verifiable RLVR via Unbiased Dr. GRPO
 
-To purge residual border reflections without labels, `DINOGRPOPolicyWrapper` freezes the first 10 ViT blocks (`torch.no_grad()`) and constructs a patch-level Bernoulli policy $\pi_\theta(\mathbf{a}\mid I) = \prod_{p=1}^{196} p_p^{a_p}(1-p_p)^{1-a_p}$ using standardized `[CLS]` attention $\hat{a}_p$, learned residual gate $g_\phi(\mathbf{z}_p)$, TokenCut diffusion prior $\hat{s}_p$, and sparsity bias $b_{\text{sparsity}} = \log(0.35 / 0.65) \approx -0.619$:
+To purge residual border reflections without labels, `DINOGRPOPolicyWrapper` freezes the first 10 ViT blocks (`torch.no_grad()`) and constructs a patch-level Bernoulli policy $\pi\_\theta(\mathbf{a}\mid I) = \prod\_{p=1}^{196} (p\_p^\theta)^{a\_p}(1-p\_p^\theta)^{1-a\_p}$ using standardized `[CLS]` attention $\hat{a}\_p$, learned residual gate $g\_\phi(\mathbf{z}\_p)$, TokenCut diffusion prior $\hat{s}\_p$, and sparsity bias $b\_{\text{sparsity}} = \log(0.35 / 0.65) \approx -0.619$:
 
 $$\ell_p^\theta = 0.55\big(\gamma \hat{a}_p^\theta + b_{\text{sparsity}}\big) + 0.45\big(g_\phi(\mathbf{z}_p) + 1.35\,\hat{s}_p + b_{\text{sparsity}}\big), \qquad p_p^\theta = \sigma(\ell_p^\theta)$$
 
@@ -134,20 +134,20 @@ $$\ell_p^\theta = 0.55\big(\gamma \hat{a}_p^\theta + b_{\text{sparsity}}\big) + 
   <img src="output/fig_policy_construction.png" width="100%" alt="6-Step Patch-Level Bernoulli Policy Construction"/>
 </p>
 
-Each group of $G=8$ sampled binary masks $\{\mathbf{a}^{(1)}, \dots, \mathbf{a}^{(8)}\}$ is evaluated by **three 100% label-free verifiable rewards** ($R = 0.45 R_{\text{equiv}} + 0.35 R_{\text{compact}} + 0.20 R_{\text{sparsity}}$):
-1. **Horizontal-Flip Geometric Equivariance IoU ($w_{\text{eq}}=0.45$)**: Binary IoU against the un-flipped Top-35% anchor $\mathbf{m}_{\text{eq}} = \operatorname{Top-}69\big(T^{-1}(\pi_\theta(T(I)))\big)$.
-2. **TokenCut Spectral Association & 2D Total Variation ($w_{\text{comp}}=0.35$)**: $0.65 R_{\text{ncut}}(\mathbf{a}^{(g)}) + 0.35 R_{\text{TV}}(\mathbf{a}^{(g)})$ over non-negative patch cosine affinity $W_{pq} = \max(0, \hat{\mathbf{z}}_p^\top \hat{\mathbf{z}}_q)$.
-3. **Target Sparsity Ratio Prior ($w_{\text{spar}}=0.20$)**: Peaks sharply at $\rho_{\text{target}} = 35\%$, preventing trivial all-ones or empty masks.
+Each group of $G=8$ sampled binary masks $\{\mathbf{a}^{(1)}, \dots, \mathbf{a}^{(8)}\}$ is evaluated by **three 100% label-free verifiable rewards** ($R = 0.45 R\_{\text{equiv}} + 0.35 R\_{\text{compact}} + 0.20 R\_{\text{sparsity}}$):
+1. **Horizontal-Flip Geometric Equivariance IoU ($w\_{\text{eq}}=0.45$)**: Binary IoU against the un-flipped Top-35% anchor $\mathbf{m}\_{\text{eq}} = \text{Top-}69\big(T^{-1}(\pi\_\theta(T(I)))\big)$.
+2. **TokenCut Spectral Association & 2D Total Variation ($w\_{\text{comp}}=0.35$)**: $0.65 R\_{\text{ncut}}(\mathbf{a}^{(g)}) + 0.35 R\_{\text{TV}}(\mathbf{a}^{(g)})$ over non-negative patch cosine affinity $W\_{pq} = \max(0, \hat{\mathbf{z}}\_p^\top \hat{\mathbf{z}}\_q)$.
+3. **Target Sparsity Ratio Prior ($w\_{\text{spar}}=0.20$)**: Peaks sharply at $\rho\_{\text{target}} = 35\%$, preventing trivial all-ones or empty masks.
 
 <p align="center">
   <img src="output/fig_reward_decomposition.png" width="100%" alt="4-Panel Verifiable Reward Decomposition"/>
 </p>
 
-We optimize the **Length-Normalized Unbiased Dr. GRPO Surrogate Objective** with **DAPO Asymmetric Clip-Higher** ($\epsilon_{\text{low}}=0.20, \epsilon_{\text{high}}=0.28$) and analytical Bernoulli KL regularization ($\beta_{\text{KL}}=0.04$):
+We optimize the **Length-Normalized Unbiased Dr. GRPO Surrogate Objective** with **DAPO Asymmetric Clip-Higher** ($\epsilon\_{\text{low}}=0.20, \epsilon\_{\text{high}}=0.28$) and analytical Bernoulli KL regularization ($\beta\_{\text{KL}}=0.04$):
 
-$$\rho_i(\theta) = \exp\!\left(\frac{1}{N}\sum_{p=1}^N \log \frac{\pi_\theta(a_{i,p}\mid I)}{\pi_{\theta_{\text{old}}}(a_{i,p}\mid I)} + 0.1\,\Delta \mathcal{C}_{\text{align}}\right), \qquad A_i^{\text{Dr.GRPO}} = R^{(i)} - \frac{1}{G}\sum_{j=1}^G R^{(j)}$$
+$$\rho_i(\theta) = \exp\left(\frac{1}{N}\sum_{p=1}^N \log \frac{\pi_\theta(a_{i,p}\mid I)}{\pi_{\theta_{\text{old}}}(a_{i,p}\mid I)} + 0.1\,\Delta \mathcal{C}_{\text{align}}\right), \qquad A_i^{\text{Dr.GRPO}} = R^{(i)} - \frac{1}{G}\sum_{j=1}^G R^{(j)}$$
 
-$$\mathcal{L}_{\text{Dr.GRPO}}(\theta) = -\frac{1}{G}\sum_{i=1}^G \min\!\Big(\rho_i(\theta) A_i^{\text{Dr.GRPO}}, \; \operatorname{clip}\!\big(\rho_i(\theta), \, 1-\epsilon_{\text{low}}, \, 1+\epsilon_{\text{high}}\big) A_i^{\text{Dr.GRPO}}\Big) + \beta_{\text{KL}}\,\mathbb{D}_{\text{KL}}\!\left(\pi_\theta \parallel \pi_{\text{ref}}\right)$$
+$$\mathcal{L}_{\text{Dr.GRPO}}(\theta) = -\frac{1}{G}\sum_{i=1}^G \min\Big(\rho_i(\theta) A_i^{\text{Dr.GRPO}}, \; \text{clip}\big(\rho_i(\theta), \, 1-\epsilon_{\text{low}}, \, 1+\epsilon_{\text{high}}\big) A_i^{\text{Dr.GRPO}}\Big) + \beta_{\text{KL}}\,\mathbb{D}_{\text{KL}}\left(\pi_\theta \parallel \pi_{\text{ref}}\right)$$
 
 <p align="center">
   <img src="output/fig_group_rollouts.png" width="96%" alt="Group Rollout Sampling G=8"/>
@@ -261,7 +261,7 @@ DINOv1/
 ├── notebooks/                 # Interactive mathematical & visual research notebooks
 ├── output/                    # High-resolution empirical plots, masks, and benchmark JSONs
 ├── papers/                    # LaTeX source & compiled 18-page paper (dr_dino.pdf)
-├── slides/                    # LaTeX Beamer source & compiled 22-slide deck (defense_presentation.pdf)
+├── slides/                    # LaTeX Beamer source & compiled 24-slide deck (defense_presentation.pdf)
 ├── tests/                     # Automated pytest suite verifying RoPE, S³, Builder, and Dr. GRPO
 ├── utils/                     # Schedulers, TokenCut spectral saliency, and logging utilities
 ├── train.py                   # Stage-1 self-supervised DINO pre-training entry point

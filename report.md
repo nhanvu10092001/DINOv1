@@ -69,7 +69,7 @@ $$\mathcal{K}_{\text{RoPE}}(c, j) = \langle \mathbf{q}_c^{\text{rot}}, \, \mathb
 ### 3.2. Spatial-Semantic Sparse Attention ($S^3$, `models/sparse_attention.py`)
 Each spatial patch query $i \in \{1, \dots, 196\}$ attends strictly to a composite support set $\mathcal{S}_i$ of **26 active keys** (9 local Chebyshev neighbors $\mathcal{N}_{\text{local}}(i)$ + 16 dynamic semantic Top-$K$ tokens $\mathcal{N}_{\text{semantic}}(i)$ + 1 global `[CLS]` conduit), normalized via exact $-\infty$ masking prior to Softmax:
 
-$$\mathcal{S}_i = \mathcal{N}_{\text{local}}(i) \;\cup\; \operatorname{Top-}16_{j \notin \mathcal{N}_{\text{local}}(i)}\!\left(\frac{\langle \mathbf{q}_i^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle}{\sqrt{d_k}}\right) \;\cup\; \{\text{CLS}\}, \qquad A_{ij} = \frac{\exp(\tilde{s}_{ij})}{\sum_{l \in \mathcal{S}_i} \exp(\tilde{s}_{il})}$$
+$$\mathcal{S}_i = \mathcal{N}_{\text{local}}(i) \;\cup\; \text{Top-}16_{j \notin \mathcal{N}_{\text{local}}(i)}\left(\frac{\langle \mathbf{q}_i^{\text{rot}}, \, \mathbf{k}_j^{\text{rot}} \rangle}{\sqrt{d_k}}\right) \;\cup\; \{\text{CLS}\}, \qquad A_{ij} = \frac{\exp(\tilde{s}_{ij})}{\sum_{l \in \mathcal{S}_i} \exp(\tilde{s}_{il})}$$
 
 <p align="center">
   <img src="output/fig_s3_routing_decomp.png" width="100%" alt="S3 Routing Decomposition"/>
@@ -114,7 +114,7 @@ For each rollout $\mathbf{a}^{(g)} \in \{0, 1\}^{196}$ ($g \in \{1, \dots, 8\}$)
 
 $$R(\mathbf{a}^{(g)}, I) = 0.45\,R_{\text{equiv}}(\mathbf{a}^{(g)}, I) + 0.35\,R_{\text{compact}}(\mathbf{a}^{(g)}, I) + 0.20\,R_{\text{sparsity}}(\mathbf{a}^{(g)})$$
 
-1. **Geometric Equivariance IoU ($w_{\text{eq}}=0.45$)**: Binary IoU against horizontal-flip anchor $\mathbf{m}_{\text{eq}} = \operatorname{Top-}69\big(T^{-1}(\pi_\theta(T(I)))\big)$.
+1. **Geometric Equivariance IoU ($w_{\text{eq}}=0.45$)**: Binary IoU against horizontal-flip anchor $\mathbf{m}_{\text{eq}} = \text{Top-}69\big(T^{-1}(\pi_\theta(T(I)))\big)$.
 2. **TokenCut Association & 2D Total Variation ($w_{\text{comp}}=0.35$)**: $0.65 R_{\text{ncut}}(\mathbf{a}^{(g)}) + 0.35 R_{\text{TV}}(\mathbf{a}^{(g)})$.
 3. **Target Sparsity Ratio Prior ($w_{\text{spar}}=0.20$)**: $\max\!\big(0, 1 - |\bar{a}^{(g)} - 0.35|^{1.5} / 0.65^{1.5}\big)$.
 
