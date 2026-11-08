@@ -256,53 +256,50 @@
 % ==============================================================================
 % SLIDE 4: DINOv1 MATHEMATICS: COLLAPSE PREVENTION
 % ==============================================================================
-\begin{frame}{DINOv1 Mechanics: Centering, Sharpening \& Loss}
+\begin{frame}{DINOv1 Mechanics: Centering, Sharpening \& Polyak EMA}
 \vspace{-0.5em}
-Unlike contrastive methods (SimCLR, MoCo), DINO requires \textbf{no negative pairs}. How does it avoid collapse?
+Self-distillation aligns cross-view distributions \textbf{without negative pairs}. Stability relies on coupled dynamics:
 
 \vspace{0.1em}
 \begin{columns}[t]
-    % Column 1: Centering vs Sharpening
+    % Column 1: Centering & Sharpening
     \begin{column}{0.49\textwidth}
-        \begin{alertblock}{\textbf{Centering (Prevents Dominance)}}
-            \footnotesize
-            Subtracts dynamic EMA center vector $\mathbf{c} \in \mathbb{R}^K$:
-            \begin{align*}
-                g_t(x) &\leftarrow g_t(x) - \mathbf{c} \\
-                \mathbf{c} &\leftarrow m \mathbf{c} + (1 - m) \tfrac{1}{B} \sum_{i=1}^B g_{\theta_t}(x_i)
-            \end{align*}
-            \vspace{-0.7em}
-            \begin{itemize}\setlength{\itemsep}{0pt}
-                \item Pulls predictions towards uniform.
-                \item Prevents collapse to a single dimension!
-            \end{itemize}
-        \end{alertblock}
-    \end{column}
-
-    % Column 2: Sharpening
-    \begin{column}{0.49\textwidth}
-        \begin{exampleblock}{\textbf{Sharpening (Prevents Uniformity)}}
-            \footnotesize
-            Uses asymmetric temperatures ($\tau_t \ll \tau_s$):
+        \begin{block}{\textbf{1. Centering \& Sharpening}}
+            \scriptsize
+            \textbf{Centering} ($m=0.9$, prevents mode collapse):
+            \[
+                g_t(x) \leftarrow g_t(x) - \mathbf{c}, \quad \mathbf{c} \leftarrow m \mathbf{c} + (1 - m) \frac{1}{B} \sum_{i=1}^B g_{\theta_t}(x_i)
+            \]
+            \vspace{-0.5em}
+            Subtracting EMA center pulls dominant dims $\to$ uniform distribution.\\[3pt]
+            \textbf{Sharpening} ($\tau_t = 0.04 \ll \tau_s = 0.10$, prevents entropy collapse):
             \[
                 P_t(x)^{(k)} = \frac{\exp\big((g_{\theta_t}(x)^{(k)} - c^{(k)}) / \tau_t\big)}{\sum_{j=1}^K \exp\big((g_{\theta_t}(x)^{(j)} - c^{(j)}) / \tau_t\big)}
             \]
-            \vspace{-0.7em}
-            \begin{itemize}\setlength{\itemsep}{0pt}
-                \item $\tau_s = 0.1$, while $\tau_t \in [0.04, 0.07]$.
-                \item Low temperature sharpens peak probability.
-                \item Prevents collapse to uniform entropy!
-            \end{itemize}
-        \end{exampleblock}
+            \vspace{-0.5em}
+            Low temperature concentrates peaks $\to$ prevents uniform blur.
+        \end{block}
+    \end{column}
+
+    % Column 2: EMA & Multi-Crop Loss
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{2. Dynamic Cosine EMA \& Multi-Crop Loss}}
+            \scriptsize
+            \textbf{Polyak-Ruppert Cosine EMA} ($\lambda_0 = 0.996 \to 1.000$):
+            \[
+                \theta_t \leftarrow \lambda_t \theta_t + (1 - \lambda_t) \theta_s, \quad \lambda_t = 1 - (1 - \lambda_0)\frac{\cos(\pi t / T) + 1}{2}
+            \]
+            \vspace{-0.5em}
+            Smoothly slows teacher evolution to provide stable targets.\\[3pt]
+            \textbf{Multi-Crop Cross-Entropy} (2 global $x^g$ + 6 local $x^l$):
+            \[
+                \mathcal{L}_{\text{DINO}} = \sum_{x \in \{x_1^g, x_2^g\}} \sum_{x' \in V, x' \neq x} - P_t(x)^\top \log P_s(x')
+            \]
+            \vspace{-0.5em}
+            Student $P_s(x') = \operatorname{Softmax}(g_{\theta_s}(x') / \tau_s)$ updated via $\nabla \theta_s$.
+        \end{block}
     \end{column}
 \end{columns}
-
-\vspace{0.2em}
-\begin{block}{\textbf{Dynamic Thermodynamic Equilibrium}}
-    \centering\footnotesize
-    $\mathbf{c}$ acts as a repulsive center force; low $\tau_t$ acts as an attractive sharpening force.\\
-    Their interaction guarantees stable, non-collapsed representation learning without contrastive negatives.
-\end{block}
 \end{frame}
 
 % ==============================================================================
@@ -498,12 +495,12 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
 % SLIDE 8: INNOVATION 1 — FREQUENCY-ADAPTIVE 2D RoPE (MATH & GEOMETRY)
 % ==============================================================================
 \begin{frame}{Innovation 1: Frequency-Adaptive 2D RoPE (Math Made Visual)}
-\vspace{-0.4em}
+\vspace{-0.6em}
 \begin{columns}[c]
     % Visual TikZ Diagram of 2D RoPE
-    \begin{column}{0.45\textwidth}
+    \begin{column}{0.38\textwidth}
         \centering
-        \resizebox{0.84\textwidth}{!}{%
+        \resizebox{0.86\textwidth}{!}{%
         \begin{tikzpicture}[font=\sffamily\footnotesize, >=Latex]
             % 2D Grid Coordinate
             \draw[step=0.6cm, gray!30, very thin] (0,0) grid (3.6,3.6);
@@ -530,28 +527,32 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
     \end{column}
 
     % Math & Properties
-    \begin{column}{0.52\textwidth}
+    \begin{column}{0.60\textwidth}
         \begin{block}{\textbf{Spectral Coordinate Blending ($M=16$ bands/axis)}}
-            \footnotesize
-            \vspace{-0.4em}
+            \scriptsize
+            \vspace{-0.3em}
             \[
-                \omega_m = B^{-2m / d_x}, \quad x_m^{\text{adapt}} = \alpha_m x_{\text{raw}} + (1 - \alpha_m) x_{\text{norm}}
+                \omega_m = B^{-2m / d_x}, \quad x_m^{\text{adapt}} = \alpha_m x_{\text{raw}} + (1 - \alpha_m) x_{\text{norm}}, \quad \alpha_m = 1 - \frac{m}{M-1}
             \]
-            \vspace{-0.6em}
+            \vspace{-0.5em}
             \begin{itemize}\setlength{\itemsep}{1pt}
-                \item \textbf{High Freq ($\alpha_0 = 1$)}: Preserves fine-grained patch steps.
-                \item \textbf{Low Freq ($\alpha_{M-1} = 0$)}: Scale-invariant global envelope.
+                \item \textbf{High Freq ($\alpha_0 = 1$)}: Preserves fine-grained local patch steps.
+                \item \textbf{Low Freq ($\alpha_{M-1} = 0$)}: Scale-invariant global envelope across crops.
             \end{itemize}
         \end{block}
 
         \vspace{-0.2em}
-        \begin{exampleblock}{\textbf{Closed-Form 2D Relative Positional Kernel}}
+        \begin{exampleblock}{\textbf{Orthogonal Rotation \& Relative Positional Kernel}}
             \scriptsize
+            \vspace{-0.3em}
+            \[
+                \mathbf{R}(\theta) = \begin{pmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{pmatrix}, \quad \langle \mathbf{q}_i^{\text{rot}}, \mathbf{k}_j^{\text{rot}} \rangle = \mathbf{q}_i^\top \mathbf{R}(\Delta \mathbf{x}) \mathbf{k}_j
+            \]
             \vspace{-0.4em}
             \[
-                \langle \mathbf{q}_c^{\text{rot}}, \mathbf{k}_j^{\text{rot}} \rangle = \sum_{m=0}^{M-1} 2\cos\!\big(\Delta x_m^{\text{adapt}}\omega_m\big) + \sum_{m=0}^{M-1} 2\cos\!\big(\Delta y_m^{\text{adapt}}\omega_m\big)
+                \mathcal{K}_{\text{RoPE}}(c, j) = 2 \sum_{m=0}^{M-1} \Big[\cos\!\big(\Delta x_m^{\text{adapt}}\omega_m\big) + \cos\!\big(\Delta y_m^{\text{adapt}}\omega_m\big)\Big]
             \]
-            \vspace{-0.5em}
+            \vspace{-0.4em}
             \textbf{\texttt{[CLS]} Token}: $\boldsymbol{\theta}_{\text{cls}} = \mathbf{0} \implies \mathbf{R}=\mathbf{I}$ (unbiased global aggregation).
         \end{exampleblock}
     \end{column}
@@ -751,11 +752,15 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
 }
 
 \vspace{0.2em}
-\begin{block}{\textbf{6-Step Patch-Level Bernoulli Policy Construction $\pi_\theta(\mathbf{a}\mid I) = \prod_{p=1}^{196} p_p^{a_p}(1-p_p)^{1-a_p}$}}
-    \vspace{-0.5em}
-    \footnotesize
+\begin{block}{\textbf{6-Step Bernoulli Patch Policy $\pi_\theta(\mathbf{a}\mid I) = \prod_{p=1}^{196} (p_p^\theta)^{a_p}(1-p_p^\theta)^{1-a_p}$}}
+    \vspace{-0.4em}
+    \scriptsize
     \[
-        \hat{a}_p = \frac{\bar{a}_p - \mu_{\bar{a}}}{\sigma_{\bar{a}} + \epsilon}, \quad b_{\text{sparsity}} = \log\!\left(\frac{0.35}{0.65}\right) \approx -0.619, \quad \ell_p^\theta = 0.55\big(\gamma \hat{a}_p^\theta + b_{\text{sparsity}}\big) + 0.45\big(g_\phi(\mathbf{z}_p) + 1.35\,\hat{s}_p + b_{\text{sparsity}}\big)
+        \bar{a}_p = \frac{1}{H}\sum_{h=1}^H A^{(L)}_{h,\text{CLS},p}, \quad \hat{a}_p = \frac{\bar{a}_p - \mu_{\bar{a}}}{\sigma_{\bar{a}} + \epsilon}, \quad b_{\text{sparsity}} = \log\!\left(\frac{0.35}{0.65}\right) \approx -0.619
+    \]
+    \vspace{-0.5em}
+    \[
+        \ell_p^\theta = 0.55\big(\gamma \hat{a}_p^\theta + b_{\text{sparsity}}\big) + 0.45\big(g_\phi(\mathbf{z}_p) + 1.35\,\hat{s}_p + b_{\text{sparsity}}\big), \quad p_p^\theta = \sigma(\ell_p^\theta)
     \]
 \end{block}
 \end{frame}
@@ -792,16 +797,16 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
 \begin{frame}{Verifiable Visual Rewards (\texttt{self\_supervised\_v1})}
 \vspace{-0.5em}
 \begin{columns}[t]
-    \begin{column}{0.32\textwidth}
+    \begin{column}{0.35\textwidth}
         \begin{block}{\textbf{1. Equivariance ($w=0.45$)}}
             \scriptsize
-            \vspace{-0.5em}
+            \vspace{-0.4em}
             \[
-                \mathbf{m}_{\text{eq}} = \operatorname{Top-}69\!\big(T^{-1}(\pi_\theta(T(I)))\big)
+                \mathbf{m}_{\text{eq}} = \operatorname{Top-}69\!\Big(\tfrac{1}{2}\big(T^{-1}(\pi_\theta(T(I))) + \mathbf{m}_{\text{sal}}\big)\Big)
             \]
-            \vspace{-0.8em}
+            \vspace{-0.6em}
             \[
-                R_{\text{equiv}} = \frac{\sum_p a_p m_{\text{eq},p}}{\sum_p (a_p + m_{\text{eq},p} - a_p m_{\text{eq},p})}
+                R_{\text{equiv}} = \frac{|\mathbf{a} \cap \mathbf{m}_{\text{eq}}|}{|\mathbf{a} \cup \mathbf{m}_{\text{eq}}| + \epsilon}
             \]
         \end{block}
     \end{column}
@@ -809,13 +814,13 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
     \begin{column}{0.32\textwidth}
         \begin{block}{\textbf{2. TokenCut + TV ($w=0.35$)}}
             \scriptsize
-            \vspace{-0.5em}
+            \vspace{-0.4em}
             \[
-                R_{\text{ncut}} = \frac{1}{2}\!\left(\frac{{\mathbf{a}}^\top \mathbf{W} \mathbf{a} - {\mathbf{a}}^\top \mathbf{W}\bar{\mathbf{a}}}{{\mathbf{a}}^\top \mathbf{W}\mathbf{1}} + 1\right)
+                R_{\text{ncut}} = \frac{1}{2}\!\left(\frac{\mathbf{a}^\top \mathbf{W}(2\mathbf{a} - \mathbf{1})}{\mathbf{a}^\top \mathbf{W}\mathbf{1} + \epsilon} + 1\right)
             \]
-            \vspace{-0.8em}
+            \vspace{-0.6em}
             \[
-                R_{\text{compact}} = 0.65 R_{\text{ncut}} + 0.35 R_{\text{TV}}
+                R_{\text{comp}} = 0.65\,R_{\text{ncut}} + 0.35\,R_{\text{TV}}
             \]
         \end{block}
     \end{column}
@@ -823,13 +828,13 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
     \begin{column}{0.31\textwidth}
         \begin{block}{\textbf{3. Sparsity ($w=0.20$)}}
             \scriptsize
-            \vspace{-0.5em}
+            \vspace{-0.4em}
             \[
-                \rho_{\text{target}} = 0.35
+                R_{\text{spar}} = \max\!\left(0, \; 1 - \left|\frac{\bar{a} - 0.35}{0.65}\right|^{1.5}\right)
             \]
-            \vspace{-0.8em}
+            \vspace{-0.6em}
             \[
-                R_{\text{spar}} = \max\!\left(0, 1 - \left|\frac{\bar{a} - 0.35}{0.65}\right|^{1.5}\right)
+                R = 0.45 R_{\text{eq}} + 0.35 R_{\text{comp}} + 0.20 R_{\text{sp}}
             \]
         \end{block}
     \end{column}
@@ -838,32 +843,33 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
 \vspace{-0.4em}
 \begin{exampleblock}{\textbf{Empirical Decomposition across All 4 Verifiable Signal Channels}}
     \centering
-    \includegraphics[width=0.98\textwidth, height=0.31\textheight, keepaspectratio]{output/fig_reward_decomposition.png}
+    \includegraphics[width=0.98\textwidth, height=0.30\textheight, keepaspectratio]{output/fig_reward_decomposition.png}
 \end{exampleblock}
 \end{frame}
 
 % ==============================================================================
-% SLIDE 15: GROUP ROLLOUT SAMPLING & DR. GRPO SURROGATE LOSS
+% SLIDE 15: GROUP ROLLOUT SAMPLING & UNBIASED ADVANTAGE
 % ==============================================================================
-\begin{frame}{Group Rollout Sampling ($G=8$) \& Unbiased Dr.\ GRPO Loss}
+\begin{frame}{Group Rollout Sampling ($G=8$) \& Unbiased Dr.\ GRPO Advantage}
 \vspace{-0.4em}
 \begin{columns}[c]
-    \begin{column}{0.53\textwidth}
+    \begin{column}{0.52\textwidth}
         \begin{block}{\textbf{Sampled Group Rollouts ($\mathbf{a}^{(1)}\dots\mathbf{a}^{(8)}$)}}
             \centering
             \includegraphics[width=\linewidth, height=0.42\textheight, keepaspectratio]{output/fig_group_rollouts.png}
         \end{block}
     \end{column}
 
-    \begin{column}{0.45\textwidth}
-        \begin{block}{\textbf{Length-Normalized Ratio \& Advantage}}
+    \begin{column}{0.46\textwidth}
+        \begin{block}{\textbf{Unbiased Mean-Centered Advantage}}
             \scriptsize
             \vspace{-0.4em}
             \[
-                A_i^{\text{Dr.GRPO}} = R^{(i)} - \frac{1}{G}\sum_{j=1}^G R^{(j)} \quad (\text{No }\sigma_R\text{ bias!})
+                A_i^{\text{Dr.GRPO}} = R^{(i)} - \frac{1}{G}\sum_{j=1}^G R^{(j)} \quad (\text{Zero }\sigma_R\text{ division bias!})
             \]
+            \vspace{-0.5em}
             \[
-                \rho_i(\theta) = \exp\!\left(\frac{1}{N}\sum_{p=1}^N \log \frac{\pi_\theta(a_{i,p}\mid I)}{\pi_{\text{old}}(a_{i,p}\mid I)}\right)
+                \rho_i(\theta) = \exp\!\left(\frac{1}{N}\sum_{p=1}^N \log \frac{\pi_\theta(a_{i,p}\mid I)}{\pi_{\theta_{\text{old}}}(a_{i,p}\mid I)} + 0.1\,\Delta \mathcal{C}_{\text{align}}\right)
             \]
         \end{block}
         \vspace{-0.3em}
@@ -876,14 +882,73 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
 \end{frame}
 
 % ==============================================================================
-% SLIDE 9: DR. GRPO ADVANTAGE & CONVERGENCE DYNAMICS
+% SLIDE 16: STAGE-2 COMPLETE MULTI-TASK LOSS FORMULATION
+% ==============================================================================
+\begin{frame}{Stage-2 Complete Multi-Task Loss Formulation}
+\vspace{-0.6em}
+\begin{columns}[t]
+    % Column 1: Policy Loss & Analytical KL
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{1. DAPO Clipped Policy Loss $\mathcal{L}_{\text{clip}}(\theta)$}}
+            \scriptsize
+            \vspace{-0.3em}
+            \[
+                \mathcal{L}_{\text{clip}}(\theta) = -\frac{1}{G}\sum_{i=1}^G \min\!\Big(\rho_i A_i, \; \operatorname{clip}(\rho_i, 1-\epsilon_{\text{low}}, 1+\epsilon_{\text{high}}) A_i\Big)
+            \]
+            \vspace{-0.5em}
+            $\epsilon_{\text{low}} = 0.20, \epsilon_{\text{high}} = 0.28$: asymmetric clip-higher encourages positive discovery while strictly suppressing background noise.
+        \end{block}
+
+        \vspace{-0.3em}
+        \begin{exampleblock}{\textbf{2. Analytical Bernoulli KL Divergence}}
+            \scriptsize
+            \vspace{-0.3em}
+            \[
+                \mathbb{D}_{\text{KL}}(\pi_\theta \parallel \pi_{\text{ref}}) = \frac{1}{N}\sum_{p=1}^N \operatorname{kl}\big(p_p^\theta \parallel p_p^{\text{ref}}\big)
+            \]
+            \vspace{-0.5em}
+            where $\operatorname{kl}(p \parallel q) = p \log \frac{p}{q} + (1-p) \log \frac{1-p}{1-q}$.\\
+            Weight $\beta_{\text{KL}} = 0.04$: closed-form anchor with \textbf{zero variance}!
+        \end{exampleblock}
+    \end{column}
+
+    % Column 2: Teacher Distill, Gate Align & Composite Loss
+    \begin{column}{0.49\textwidth}
+        \begin{block}{\textbf{3. FG Distill \& BCE Gate Alignment}}
+            \scriptsize
+            \textbf{Foreground Distillation} ($w=0.30$):
+            \[
+                \mathcal{L}_{\text{FG-Distill}} = 1 - \big\langle \hat{\mathbf{f}}_{\text{cls}}, \; 0.88\,\hat{\mathbf{f}}_{\text{cls}}^{\text{ref}} + 0.12\,\hat{\mathbf{f}}_{\text{fg}}^{\star}\big\rangle
+            \]
+            \vspace{-0.5em}
+            Injects top spatial tokens $\hat{\mathbf{f}}_{\text{fg}}^\star = \text{Norm}(\sum_p a_p^\star \mathbf{z}_p)$ into \texttt{[CLS]}.\\[2pt]
+            \textbf{BCE Gate Alignment} ($w=0.25$, $\sigma_p^\phi = \sigma(g_\phi(\mathbf{z}_p))$):
+            \[
+                \mathcal{L}_{\text{Gate}} = -\frac{1}{N}\sum_{p=1}^N \Big[a_p^\star \log \sigma_p^\phi + (1 - a_p^\star)\log(1 - \sigma_p^\phi)\Big]
+            \]
+        \end{block}
+
+        \vspace{-0.3em}
+        \begin{alertblock}{\textbf{Total Stage-2 Composite Objective}}
+            \scriptsize
+            \vspace{-0.4em}
+            \[
+                \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{clip}}(\theta) + \beta_{\text{KL}}\mathbb{D}_{\text{KL}} + 0.30\,\mathcal{L}_{\text{FG-Distill}} + 0.25\,\mathcal{L}_{\text{Gate}}
+            \]
+        \end{alertblock}
+    \end{column}
+\end{columns}
+\end{frame}
+
+% ==============================================================================
+% SLIDE 17: DR. GRPO ADVANTAGE & CONVERGENCE DYNAMICS
 % ==============================================================================
 \begin{frame}{Dr.\ GRPO Unbiased Advantage \& Convergence Dynamics}
 \vspace{-0.3em}
 \begin{columns}[c]
     % Visual diagram of Unbiased Advantage
     \begin{column}{0.48\textwidth}
-        \begin{block}{\textbf{Unbiased Group Advantage $A^{(g)}$}}
+        \begin{block}{\textbf{Unbiased Group Advantage $A_i^{\text{Dr.GRPO}}$}}
             \centering
             \vspace{0.2em}
             \begin{tikzpicture}[scale=0.85, every node/.style={transform shape}]
@@ -904,7 +969,10 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
             \end{tikzpicture}
             \vspace{0.2em}
             \scriptsize
-            \textbf{Why Dr.\ GRPO?}: Omitting $\sigma_R$ division eliminates gradient explosions when all rollouts achieve similar rewards!
+            \begin{itemize}\setlength{\itemsep}{1pt}
+                \item Exact zero-sum property: $\sum_{i=1}^G A_i^{\text{Dr.GRPO}} \equiv 0$.
+                \item Zero $\sigma_R$ division avoids exploding variance as $\sigma_R \to 0$.
+            \end{itemize}
         \end{block}
     \end{column}
 
@@ -927,14 +995,17 @@ Prior to DINO, self-supervised learning flourished on CNNs but failed to scale c
             \end{tikzpicture}
             \vspace{0.2em}
             \scriptsize
-            Rapid, monotonic improvement within 2 epochs; zero policy collapse or catastrophic forgetting!
+            \begin{itemize}\setlength{\itemsep}{1pt}
+                \item Rapid monotonic surge within first 2 epochs.
+                \item Stable $\mathbb{D}_{\text{KL}} < 0.08$ with zero catastrophic forgetting!
+            \end{itemize}
         \end{exampleblock}
     \end{column}
 \end{columns}
 \end{frame}
 
 % ==============================================================================
-% SLIDE 10: QUANTITATIVE BENCHMARK: CIFAR-10 CLASSIFICATION
+% SLIDE 18: QUANTITATIVE BENCHMARK: CIFAR-10 CLASSIFICATION
 % ==============================================================================
 \begin{frame}{Quantitative Benchmark: CIFAR-10 Downstream Evaluation}
 \vspace{-0.3em}
@@ -977,7 +1048,7 @@ Linear Probe Top-5 (\textbf{Best Checkpoint}) & 99.31\% & \textbf{99.44\%} & \te
 \end{frame}
 
 % ==============================================================================
-% SLIDE 11: VISUAL EVIDENCE I: STAGE-1 ATTENTION SPECIALIZATION (NO RLVR YET)
+% SLIDE 19: VISUAL EVIDENCE I: STAGE-1 ATTENTION SPECIALIZATION (NO RLVR YET)
 % ==============================================================================
 \begin{frame}{Visual Evidence I: Stage-1 Multi-Head Attention Specialization}
 \vspace{-0.4em}
@@ -1008,7 +1079,7 @@ Linear Probe Top-5 (\textbf{Best Checkpoint}) & 99.31\% & \textbf{99.44\%} & \te
 \end{frame}
 
 % ==============================================================================
-% SLIDE 12: COMPLETE 2x2 FACTORIAL ABLATION MATRIX
+% SLIDE 20: COMPLETE 2x2 FACTORIAL ABLATION MATRIX
 % ==============================================================================
 \begin{frame}{Complete $2 \times 2$ Factorial Ablation Matrix}
 \vspace{-0.3em}
@@ -1056,7 +1127,7 @@ Evaluated on full CIFAR-10 (50,000 train / 10,000 test images) across both axes:
 \end{frame}
 
 % ==============================================================================
-% SLIDE 19: VISUAL EVIDENCE II: CONTIGUOUS MASKS & BORDER LEAKAGE
+% SLIDE 21: VISUAL EVIDENCE II: CONTIGUOUS MASKS & BORDER LEAKAGE
 % ==============================================================================
 \begin{frame}{Visual Evidence II: Contiguous Object Masks \& Border Leakage}
 \vspace{-0.5em}
@@ -1072,7 +1143,7 @@ Evaluated on full CIFAR-10 (50,000 train / 10,000 test images) across both axes:
 \end{frame}
 
 % ==============================================================================
-% SLIDE 20: VISUAL EVIDENCE III: PRE-RL VS POST-RL 6-HEAD COMPARISON
+% SLIDE 22: VISUAL EVIDENCE III: PRE-RL VS POST-RL 6-HEAD COMPARISON
 % ==============================================================================
 \begin{frame}{Visual Evidence III: Pre-RL vs.\ Post-RL Multi-Head Alignment}
 \vspace{-0.4em}
@@ -1098,7 +1169,7 @@ Evaluated on full CIFAR-10 (50,000 train / 10,000 test images) across both axes:
 \end{frame}
 
 % ==============================================================================
-% SLIDE 14: HARDWARE PROFILING & EFFICIENCY
+% SLIDE 23: HARDWARE PROFILING & EFFICIENCY
 % ==============================================================================
 \begin{frame}{Hardware Profiling \& Computational Efficiency}
 \vspace{-0.3em}
@@ -1132,7 +1203,7 @@ RLVR Policy VRAM Footprint & -- & \textbf{< 3\,GB} & \textbf{Shared-Prefix Effic
 \end{frame}
 
 % ==============================================================================
-% SLIDE 15: CONCLUSION & DEFENSE TAKEAWAYS
+% SLIDE 24: CONCLUSION & DEFENSE TAKEAWAYS
 % ==============================================================================
 \begin{frame}{Conclusion: Three Pillars of Dr.\ DINO}
 \vspace{-0.3em}
